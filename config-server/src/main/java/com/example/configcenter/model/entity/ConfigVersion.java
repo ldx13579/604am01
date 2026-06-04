@@ -35,6 +35,9 @@ public class ConfigVersion {
     @Column(length = 100)
     private String operator = "system";
 
+    @Column(length = 500)
+    private String description = "";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -69,6 +72,9 @@ public class ConfigVersion {
 
     public String getOperator() { return operator; }
     public void setOperator(String operator) { this.operator = operator; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

@@ -36,7 +36,7 @@ public class NotificationService {
 
     public void notifyChange(String environment, String namespace) {
         String key = environment + ":" + namespace;
-        CopyOnWriteArrayList<DeferredResult<PollingResponse>> list = holders.remove(key);
+        CopyOnWriteArrayList<DeferredResult<PollingResponse>> list = holders.get(key);
         if (list == null || list.isEmpty()) return;
 
         Long version = versionCounterRepo.findByEnvironmentAndNamespace(environment, namespace)
@@ -47,10 +47,13 @@ public class NotificationService {
                 .stream().map(this::toDTO).toList();
 
         PollingResponse response = PollingResponse.changed(version, configs);
-        for (DeferredResult<PollingResponse> result : list) {
+
+        List<DeferredResult<PollingResponse>> snapshot = List.copyOf(list);
+        for (DeferredResult<PollingResponse> result : snapshot) {
             if (!result.isSetOrExpired()) {
                 result.setResult(response);
             }
+            list.remove(result);
         }
     }
 

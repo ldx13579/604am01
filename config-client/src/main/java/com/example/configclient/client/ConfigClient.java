@@ -21,6 +21,15 @@ public class ConfigClient {
     @Value("${config.client.namespace:default}")
     private String namespace;
 
+    @Value("${config.client.max-retries:10}")
+    private int maxRetries;
+
+    @Value("${config.client.base-backoff-ms:1000}")
+    private long baseBackoffMs;
+
+    @Value("${config.client.max-backoff-ms:60000}")
+    private long maxBackoffMs;
+
     private volatile Long localVersion = 0L;
     private final ConcurrentHashMap<String, String> configCache = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<ConfigChangeListener> listeners = new CopyOnWriteArrayList<>();
@@ -67,6 +76,8 @@ public class ConfigClient {
     }
 
     private void pollingLoop() {
+        int consecutiveFailures = 0;
+
         while (running) {
             try {
                 String url = String.format("%s/api/polling?env=%s&ns=%s&clientVersion=%d",
@@ -74,6 +85,8 @@ public class ConfigClient {
 
                 @SuppressWarnings("unchecked")
                 Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+
+                consecutiveFailures = 0;
 
                 if (response != null && Boolean.TRUE.equals(response.get("hasChange"))) {
                     Long newVersion = ((Number) response.get("version")).longValue();
@@ -93,10 +106,19 @@ public class ConfigClient {
                     notifyListeners();
                 }
             } catch (Exception e) {
-                if (running) {
-                    System.err.println("Polling error: " + e.getMessage() + ", retrying in 3s...");
-                    try { Thread.sleep(3000); } catch (InterruptedException ie) { break; }
+                if (!running) break;
+
+                consecutiveFailures++;
+                if (consecutiveFailures >= maxRetries) {
+                    System.err.println("Polling failed " + maxRetries + " times consecutively, stopping client.");
+                    running = false;
+                    break;
                 }
+
+                long backoff = Math.min(baseBackoffMs * (1L << (consecutiveFailures - 1)), maxBackoffMs);
+                System.err.println("Polling error (attempt " + consecutiveFailures + "/" + maxRetries
+                        + "): " + e.getMessage() + ", retrying in " + backoff + "ms...");
+                try { Thread.sleep(backoff); } catch (InterruptedException ie) { break; }
             }
         }
     }

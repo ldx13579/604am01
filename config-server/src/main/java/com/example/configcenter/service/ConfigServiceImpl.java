@@ -3,6 +3,9 @@ package com.example.configcenter.service;
 import com.example.configcenter.model.dto.*;
 import com.example.configcenter.model.entity.*;
 import com.example.configcenter.repository.*;
+import com.example.configcenter.exception.ConfigNotFoundException;
+import com.example.configcenter.exception.ConfigAlreadyExistsException;
+import com.example.configcenter.exception.VersionNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +38,7 @@ public class ConfigServiceImpl implements ConfigService {
     @Override
     public ConfigItemDTO getConfig(Long id) {
         ConfigItem item = configItemRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Config not found: " + id));
+                .orElseThrow(() -> new ConfigNotFoundException("Config not found: " + id));
         return toDTO(item);
     }
 
@@ -44,7 +47,7 @@ public class ConfigServiceImpl implements ConfigService {
     public ConfigItemDTO createConfig(ConfigCreateRequest request) {
         if (configItemRepo.existsByConfigKeyAndEnvironmentAndNamespace(
                 request.getConfigKey(), request.getEnvironment(), request.getNamespace())) {
-            throw new RuntimeException("Config key already exists in this environment/namespace");
+            throw new ConfigAlreadyExistsException("Config key already exists in this environment/namespace");
         }
 
         Long newVersion = incrementVersion(request.getEnvironment(), request.getNamespace());
@@ -68,7 +71,7 @@ public class ConfigServiceImpl implements ConfigService {
     @Transactional
     public ConfigItemDTO updateConfig(Long id, ConfigUpdateRequest request) {
         ConfigItem item = configItemRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Config not found: " + id));
+                .orElseThrow(() -> new ConfigNotFoundException("Config not found: " + id));
 
         Long newVersion = incrementVersion(item.getEnvironment(), item.getNamespace());
 
@@ -89,7 +92,7 @@ public class ConfigServiceImpl implements ConfigService {
     @Transactional
     public void deleteConfig(Long id) {
         ConfigItem item = configItemRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Config not found: " + id));
+                .orElseThrow(() -> new ConfigNotFoundException("Config not found: " + id));
 
         Long newVersion = incrementVersion(item.getEnvironment(), item.getNamespace());
         item.setVersion(newVersion);
@@ -102,7 +105,7 @@ public class ConfigServiceImpl implements ConfigService {
     @Override
     public List<ConfigVersion> getVersionHistory(Long id) {
         configItemRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Config not found: " + id));
+                .orElseThrow(() -> new ConfigNotFoundException("Config not found: " + id));
         return configVersionRepo.findByConfigItemIdOrderByVersionDesc(id);
     }
 
@@ -110,14 +113,15 @@ public class ConfigServiceImpl implements ConfigService {
     @Transactional
     public ConfigItemDTO rollback(Long id, Long targetVersion) {
         ConfigItem item = configItemRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Config not found: " + id));
+                .orElseThrow(() -> new ConfigNotFoundException("Config not found: " + id));
 
         ConfigVersion target = configVersionRepo.findByConfigItemIdAndVersion(id, targetVersion)
-                .orElseThrow(() -> new RuntimeException("Version not found: " + targetVersion));
+                .orElseThrow(() -> new VersionNotFoundException("Version not found: " + targetVersion));
 
         Long newVersion = incrementVersion(item.getEnvironment(), item.getNamespace());
 
         item.setConfigValue(target.getConfigValue());
+        item.setDescription(target.getDescription());
         item.setVersion(newVersion);
         item = configItemRepo.save(item);
 
@@ -157,6 +161,7 @@ public class ConfigServiceImpl implements ConfigService {
         version.setNamespace(item.getNamespace());
         version.setVersion(item.getVersion());
         version.setOperation(operation);
+        version.setDescription(item.getDescription());
         configVersionRepo.save(version);
     }
 

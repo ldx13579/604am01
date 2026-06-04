@@ -21,6 +21,7 @@ CREATE TABLE config_version (
     config_value    TEXT NOT NULL,
     environment     VARCHAR(20) NOT NULL,
     namespace       VARCHAR(100) NOT NULL DEFAULT 'default',
+    description     VARCHAR(500) DEFAULT '',
     version         BIGINT NOT NULL,
     operation       VARCHAR(20) NOT NULL COMMENT 'CREATE / UPDATE / ROLLBACK / DELETE',
     operator        VARCHAR(100) DEFAULT 'system',
