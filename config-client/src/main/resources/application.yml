@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: config-client-demo
+
+config:
+  server:
+    url: http://localhost:8080
+  client:
+    env: dev
+    namespace: default
