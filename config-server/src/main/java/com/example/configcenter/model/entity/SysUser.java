@@ -23,6 +23,15 @@ public class SysUser {
     @Column(nullable = false)
     private Boolean enabled = true;
 
+    @Column(name = "force_password_change", nullable = false)
+    private Boolean forcePasswordChange = false;
+
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
+    @Column(name = "last_login_ip", length = 50)
+    private String lastLoginIp;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -54,6 +63,15 @@ public class SysUser {
 
     public Boolean getEnabled() { return enabled; }
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+
+    public Boolean getForcePasswordChange() { return forcePasswordChange; }
+    public void setForcePasswordChange(Boolean forcePasswordChange) { this.forcePasswordChange = forcePasswordChange; }
+
+    public LocalDateTime getLastLoginAt() { return lastLoginAt; }
+    public void setLastLoginAt(LocalDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
+
+    public String getLastLoginIp() { return lastLoginIp; }
+    public void setLastLoginIp(String lastLoginIp) { this.lastLoginIp = lastLoginIp; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 

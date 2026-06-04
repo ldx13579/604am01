@@ -38,6 +38,21 @@ public class AuditLog {
     @Column(name = "ip_address")
     private String ipAddress;
 
+    @Column(name = "user_agent", length = 500)
+    private String userAgent;
+
+    @Column(name = "request_method", length = 10)
+    private String requestMethod;
+
+    @Column(name = "request_uri", length = 500)
+    private String requestUri;
+
+    @Column(name = "session_id", length = 100)
+    private String sessionId;
+
+    @Column(name = "duration_ms")
+    private Long durationMs;
+
     @Column(nullable = false)
     private String result = "SUCCESS";
 
@@ -81,6 +96,21 @@ public class AuditLog {
 
     public String getIpAddress() { return ipAddress; }
     public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress; }
+
+    public String getUserAgent() { return userAgent; }
+    public void setUserAgent(String userAgent) { this.userAgent = userAgent; }
+
+    public String getRequestMethod() { return requestMethod; }
+    public void setRequestMethod(String requestMethod) { this.requestMethod = requestMethod; }
+
+    public String getRequestUri() { return requestUri; }
+    public void setRequestUri(String requestUri) { this.requestUri = requestUri; }
+
+    public String getSessionId() { return sessionId; }
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+
+    public Long getDurationMs() { return durationMs; }
+    public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }
 
     public String getResult() { return result; }
     public void setResult(String result) { this.result = result; }

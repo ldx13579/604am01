@@ -14,7 +14,13 @@ api.interceptors.request.use(config => {
 })
 
 api.interceptors.response.use(
-  response => response,
+  response => {
+    const refreshedToken = response.headers['x-refreshed-token']
+    if (refreshedToken) {
+      auth.updateToken(refreshedToken)
+    }
+    return response
+  },
   error => {
     if (error.response && error.response.status === 401) {
       auth.logout()
@@ -62,3 +68,9 @@ export const cancelRule = (id) =>
 
 export const getClients = (env, ns = 'default') =>
   api.get('/grayscale/clients', { params: { env, ns } })
+
+export const changePassword = (oldPassword, newPassword) =>
+  api.post('/auth/change-password', { oldPassword, newPassword })
+
+export const refreshToken = () =>
+  api.post('/auth/refresh')

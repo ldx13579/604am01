@@ -46,6 +46,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 AuditContext.setUsername(username);
                 AuditContext.setIp(getClientIp(request));
+                AuditContext.setUserAgent(truncate(request.getHeader("User-Agent"), 500));
+                AuditContext.setRequestMethod(request.getMethod());
+                AuditContext.setRequestUri(request.getRequestURI());
+                AuditContext.setSessionId(request.getHeader("X-Request-ID"));
+
+                if (jwtTokenProvider.shouldRefresh(token)) {
+                    String newToken = jwtTokenProvider.generateToken(username);
+                    response.setHeader("X-Refreshed-Token", newToken);
+                }
             }
 
             filterChain.doFilter(request, response);
@@ -72,5 +81,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return xRealIp;
         }
         return request.getRemoteAddr();
+    }
+
+    private String truncate(String value, int maxLen) {
+        if (value == null) return null;
+        return value.length() > maxLen ? value.substring(0, maxLen) : value;
     }
 }

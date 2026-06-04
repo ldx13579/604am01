@@ -14,6 +14,10 @@ public class AuditLogDTO {
     private String oldValue;
     private String newValue;
     private String ipAddress;
+    private String userAgent;
+    private String requestMethod;
+    private String requestUri;
+    private Long durationMs;
     private String result;
     private String errorMessage;
     private LocalDateTime createdAt;
@@ -47,6 +51,18 @@ public class AuditLogDTO {
 
     public String getIpAddress() { return ipAddress; }
     public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress; }
+
+    public String getUserAgent() { return userAgent; }
+    public void setUserAgent(String userAgent) { this.userAgent = userAgent; }
+
+    public String getRequestMethod() { return requestMethod; }
+    public void setRequestMethod(String requestMethod) { this.requestMethod = requestMethod; }
+
+    public String getRequestUri() { return requestUri; }
+    public void setRequestUri(String requestUri) { this.requestUri = requestUri; }
+
+    public Long getDurationMs() { return durationMs; }
+    public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }
 
     public String getResult() { return result; }
     public void setResult(String result) { this.result = result; }

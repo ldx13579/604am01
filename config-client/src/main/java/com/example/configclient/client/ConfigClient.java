@@ -1,6 +1,10 @@
 package com.example.configclient.client;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -31,6 +35,9 @@ public class ConfigClient {
 
     @Value("${config.client.reconnect-interval-ms:30000}")
     private long reconnectIntervalMs;
+
+    @Value("${config.client.auth-token:}")
+    private String authToken;
 
     private volatile Long localVersion = 0L;
     private final ConcurrentHashMap<String, String> configCache = new ConcurrentHashMap<>();
@@ -118,7 +125,7 @@ public class ConfigClient {
                         serverUrl, environment, namespace, localVersion);
 
                 @SuppressWarnings("unchecked")
-                Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+                Map<String, Object> response = authenticatedGet(url, Map.class);
 
                 consecutiveFailures = 0;
 
@@ -180,7 +187,7 @@ public class ConfigClient {
             try {
                 String url = String.format("%s/api/version?env=%s&ns=%s",
                         serverUrl, environment, namespace);
-                restTemplate.getForObject(url, Long.class);
+                authenticatedGet(url, Long.class);
 
                 System.out.println("Config server is reachable, restarting polling...");
                 reconnectScheduler.shutdownNow();
@@ -190,6 +197,17 @@ public class ConfigClient {
                         + ", next attempt in " + reconnectIntervalMs + "ms");
             }
         }, reconnectIntervalMs, reconnectIntervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    private <T> T authenticatedGet(String url, Class<T> responseType) {
+        if (authToken != null && !authToken.isEmpty()) {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Bearer " + authToken);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<T> response = restTemplate.exchange(url, HttpMethod.GET, entity, responseType);
+            return response.getBody();
+        }
+        return restTemplate.getForObject(url, responseType);
     }
 
     private void notifyListeners() {

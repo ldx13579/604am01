@@ -28,7 +28,7 @@ public class AuditServiceImpl implements AuditService {
                        String env, String ns, String oldValue, String newValue,
                        String ip, String result, String errorMessage) {
         AuditLog log = new AuditLog();
-        log.setUsername(username);
+        log.setUsername(username != null ? username : "system");
         log.setAction(action);
         log.setResourceType(resourceType);
         log.setResourceId(resourceId);
@@ -37,7 +37,7 @@ public class AuditServiceImpl implements AuditService {
         log.setOldValue(oldValue);
         log.setNewValue(newValue);
         log.setIpAddress(ip);
-        log.setResult(result);
+        log.setResult(result != null ? result : "SUCCESS");
         log.setErrorMessage(errorMessage);
         auditLogRepository.save(log);
     }
@@ -48,7 +48,7 @@ public class AuditServiceImpl implements AuditService {
             List<Predicate> predicates = new ArrayList<>();
 
             if (query.getUsername() != null && !query.getUsername().isEmpty()) {
-                predicates.add(cb.equal(root.get("username"), query.getUsername()));
+                predicates.add(cb.like(root.get("username"), "%" + query.getUsername() + "%"));
             }
             if (query.getAction() != null && !query.getAction().isEmpty()) {
                 predicates.add(cb.equal(root.get("action"), query.getAction()));
@@ -90,6 +90,10 @@ public class AuditServiceImpl implements AuditService {
         dto.setOldValue(log.getOldValue());
         dto.setNewValue(log.getNewValue());
         dto.setIpAddress(log.getIpAddress());
+        dto.setUserAgent(log.getUserAgent());
+        dto.setRequestMethod(log.getRequestMethod());
+        dto.setRequestUri(log.getRequestUri());
+        dto.setDurationMs(log.getDurationMs());
         dto.setResult(log.getResult());
         dto.setErrorMessage(log.getErrorMessage());
         dto.setCreatedAt(log.getCreatedAt());

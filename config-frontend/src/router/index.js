@@ -57,6 +57,10 @@ router.beforeEach(async (to, from, next) => {
       return
     }
   }
+  if (auth.state.forcePasswordChange && to.path !== '/login') {
+    next('/login')
+    return
+  }
   next()
 })
 

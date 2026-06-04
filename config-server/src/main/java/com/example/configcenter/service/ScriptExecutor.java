@@ -2,24 +2,65 @@ package com.example.configcenter.service;
 
 import com.example.configcenter.model.dto.ValidationResult;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.HostAccess;
 import org.graalvm.polyglot.PolyglotException;
+import org.graalvm.polyglot.SandboxPolicy;
 import org.graalvm.polyglot.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayOutputStream;
+import java.util.Set;
 import java.util.concurrent.*;
+import java.util.regex.Pattern;
 
 @Component
 public class ScriptExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(ScriptExecutor.class);
     private static final long TIMEOUT_SECONDS = 5;
+    private static final int MAX_SCRIPT_LENGTH = 64 * 1024;
+    private static final int MAX_OUTPUT_BYTES = 4096;
+
+    private static final Set<String> BLOCKED_KEYWORDS = Set.of(
+            "java.lang.Runtime", "java.lang.ProcessBuilder", "java.io.File",
+            "java.net.Socket", "java.net.URL", "java.net.HttpURLConnection",
+            "Packages", "java.lang.System", "java.lang.Thread",
+            "eval(", "Function(", "new Function",
+            "require(", "import(", "globalThis.Deno", "globalThis.process"
+    );
+
+    private static final Set<String> ALLOWED_JS_GLOBALS = Set.of(
+            "JSON", "Math", "parseInt", "parseFloat", "isNaN", "isFinite",
+            "String", "Number", "Boolean", "Array", "Object", "RegExp", "Date",
+            "Map", "Set", "Error", "TypeError", "RangeError", "undefined", "NaN", "Infinity"
+    );
+
+    private static final Pattern SUSPICIOUS_PATTERN = Pattern.compile(
+            "(\\bwhile\\s*\\(\\s*true\\s*\\))|" +
+            "(\\bfor\\s*\\(\\s*;\\s*;)|" +
+            "(\\bProcess\\b)|" +
+            "(\\bexec\\s*\\()|" +
+            "(\\b__proto__\\b)|" +
+            "(\\bconstructor\\b\\s*\\[)"
+    );
 
     public ValidationResult execute(String scriptContent, String configKey, String configValue) {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ValidationResult preCheck = preValidateScript(scriptContent);
+        if (preCheck != null) {
+            return preCheck;
+        }
+
+        ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "script-executor");
+            t.setDaemon(true);
+            return t;
+        });
+
         try {
-            Future<ValidationResult> future = executor.submit(() -> executeScript(scriptContent, configKey, configValue));
+            Future<ValidationResult> future = executor.submit(
+                    () -> executeScript(scriptContent, configKey, configValue));
             return future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             log.warn("Script execution timed out after {} seconds", TIMEOUT_SECONDS);
@@ -36,15 +77,55 @@ public class ScriptExecutor {
         }
     }
 
+    private ValidationResult preValidateScript(String scriptContent) {
+        if (scriptContent == null || scriptContent.isBlank()) {
+            return new ValidationResult(false, "Script content cannot be empty");
+        }
+
+        if (scriptContent.length() > MAX_SCRIPT_LENGTH) {
+            return new ValidationResult(false,
+                    "Script exceeds maximum allowed size of " + (MAX_SCRIPT_LENGTH / 1024) + "KB");
+        }
+
+        for (String keyword : BLOCKED_KEYWORDS) {
+            if (scriptContent.contains(keyword)) {
+                return new ValidationResult(false,
+                        "Script contains blocked keyword: " + keyword + ". Only pure data validation logic is allowed.");
+            }
+        }
+
+        if (SUSPICIOUS_PATTERN.matcher(scriptContent).find()) {
+            return new ValidationResult(false,
+                    "Script contains suspicious patterns that are not allowed in validation scripts");
+        }
+
+        return null;
+    }
+
     private ValidationResult executeScript(String scriptContent, String configKey, String configValue) {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream(MAX_OUTPUT_BYTES);
+
         try (Context context = Context.newBuilder("js")
                 .allowAllAccess(false)
+                .allowHostAccess(HostAccess.NONE)
+                .allowHostClassLookup(className -> false)
+                .allowIO(false)
+                .allowCreateThread(false)
+                .allowCreateProcess(false)
+                .allowNativeAccess(false)
+                .allowEnvironmentAccess(false)
+                .out(outputStream)
+                .err(outputStream)
                 .option("engine.WarnInterpreterOnly", "false")
+                .option("js.ecmascript-version", "2021")
                 .build()) {
+
+            Value bindings = context.getBindings("js");
+            removeUnsafeGlobals(bindings);
 
             context.eval("js", scriptContent);
 
-            Value validateFn = context.getBindings("js").getMember("validate");
+            Value validateFn = bindings.getMember("validate");
             if (validateFn == null || !validateFn.canExecute()) {
                 return new ValidationResult(false, "Script must define a 'validate(key, value)' function");
             }
@@ -52,20 +133,39 @@ public class ScriptExecutor {
             Value result = validateFn.execute(configKey, configValue);
 
             if (result == null || !result.hasMembers()) {
-                return new ValidationResult(false, "Script validate() must return an object with 'valid' and 'message' properties");
+                return new ValidationResult(false,
+                        "validate() must return an object with 'valid' (boolean) and 'message' (string) properties");
             }
 
             Value validValue = result.getMember("valid");
             Value messageValue = result.getMember("message");
 
-            boolean valid = validValue != null && validValue.asBoolean();
+            boolean valid = validValue != null && validValue.isBoolean() && validValue.asBoolean();
             String message = messageValue != null && !messageValue.isNull() ? messageValue.asString() : "";
 
             return new ValidationResult(valid, message);
 
         } catch (PolyglotException e) {
+            if (e.isResourceExhausted()) {
+                return new ValidationResult(false, "Script exceeded resource limits");
+            }
             log.error("Polyglot script error: {}", e.getMessage());
             return new ValidationResult(false, "Script error: " + e.getMessage());
+        }
+    }
+
+    private void removeUnsafeGlobals(Value bindings) {
+        try {
+            bindings.removeMember("load");
+            bindings.removeMember("loadWithNewGlobal");
+            bindings.removeMember("exit");
+            bindings.removeMember("quit");
+            bindings.removeMember("print");
+            bindings.removeMember("printErr");
+            bindings.removeMember("read");
+            bindings.removeMember("readFully");
+            bindings.removeMember("readline");
+        } catch (Exception ignored) {
         }
     }
 }

@@ -82,6 +82,9 @@ CREATE TABLE sys_user (
     password_hash   VARCHAR(255) NOT NULL,
     display_name    VARCHAR(100),
     enabled         TINYINT(1) NOT NULL DEFAULT 1,
+    force_password_change TINYINT(1) NOT NULL DEFAULT 0 COMMENT '首次登录强制修改密码',
+    last_login_at   DATETIME,
+    last_login_ip   VARCHAR(50),
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -97,9 +100,9 @@ CREATE TABLE sys_user_role (
     INDEX idx_user_id (user_id)
 ) ENGINE=InnoDB;
 
--- 默认管理员账户 (密码: admin123, BCrypt加密)
-INSERT INTO sys_user (username, password_hash, display_name)
-VALUES ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Administrator');
+-- 默认管理员账户 (初始密码: Cfg$2024#Adm!nX9zK, BCrypt加密, 首次登录强制修改)
+INSERT INTO sys_user (username, password_hash, display_name, force_password_change)
+VALUES ('admin', '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', 'Administrator', 1);
 
 INSERT INTO sys_user_role (user_id, role, environment, namespace)
 VALUES (1, 'ADMIN', '*', '*');
@@ -109,22 +112,28 @@ VALUES (1, 'ADMIN', '*', '*');
 CREATE TABLE audit_log (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY,
     username        VARCHAR(50) NOT NULL,
-    action          VARCHAR(30) NOT NULL COMMENT 'CREATE_CONFIG / UPDATE_CONFIG / DELETE_CONFIG / ROLLBACK / ...',
-    resource_type   VARCHAR(30) NOT NULL COMMENT 'CONFIG / USER / ROLE / GRAYSCALE_RULE / VALIDATION_SCRIPT',
+    action          VARCHAR(30) NOT NULL COMMENT 'CREATE_CONFIG / UPDATE_CONFIG / DELETE_CONFIG / ROLLBACK / LOGIN / CHANGE_PASSWORD / ...',
+    resource_type   VARCHAR(30) NOT NULL COMMENT 'CONFIG / USER / ROLE / GRAYSCALE_RULE / VALIDATION_SCRIPT / SESSION',
     resource_id     VARCHAR(100),
     environment     VARCHAR(20),
     namespace       VARCHAR(100),
     old_value       TEXT,
     new_value       TEXT,
     ip_address      VARCHAR(50),
-    result          VARCHAR(10) NOT NULL DEFAULT 'SUCCESS' COMMENT 'SUCCESS / FAILED',
+    user_agent      VARCHAR(500),
+    request_method  VARCHAR(10),
+    request_uri     VARCHAR(500),
+    session_id      VARCHAR(100),
+    duration_ms     BIGINT COMMENT '操作耗时(毫秒)',
+    result          VARCHAR(10) NOT NULL DEFAULT 'SUCCESS' COMMENT 'SUCCESS / FAILURE',
     error_message   TEXT,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_username (username),
     INDEX idx_action (action),
     INDEX idx_resource (resource_type, resource_id),
     INDEX idx_created_at (created_at),
-    INDEX idx_env_ns (environment, namespace)
+    INDEX idx_env_ns (environment, namespace),
+    INDEX idx_result (result)
 ) ENGINE=InnoDB;
 
 -- ===================== 加密密钥管理 =====================

@@ -29,6 +29,7 @@ grayscale:
 jwt:
   secret: MyConfigCenterJwtSecretKey2024ForHS256MustBe32BytesLong!!
   expiration-ms: 86400000
+  refresh-threshold-ms: 1800000
 
 encryption:
   master-key: AES256MasterKey32BytesLong123456

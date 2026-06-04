@@ -1,6 +1,7 @@
 package com.example.configcenter.audit;
 
-import com.example.configcenter.service.AuditService;
+import com.example.configcenter.model.entity.AuditLog;
+import com.example.configcenter.repository.AuditLogRepository;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -14,10 +15,10 @@ import java.lang.reflect.Parameter;
 @Component
 public class AuditAspect {
 
-    private final AuditService auditService;
+    private final AuditLogRepository auditLogRepository;
 
-    public AuditAspect(AuditService auditService) {
-        this.auditService = auditService;
+    public AuditAspect(AuditLogRepository auditLogRepository) {
+        this.auditLogRepository = auditLogRepository;
     }
 
     @Around("@annotation(com.example.configcenter.audit.Auditable)")
@@ -34,22 +35,54 @@ public class AuditAspect {
         String resourceId = extractResourceId(joinPoint);
         String oldValue = null;
 
-        if ("UPDATE".equalsIgnoreCase(action) || "DELETE".equalsIgnoreCase(action)) {
+        if (action.contains("UPDATE") || action.contains("DELETE") || action.contains("ROLLBACK")) {
             oldValue = fetchOldState(resourceId);
         }
 
+        long startTime = System.currentTimeMillis();
         Object result;
         try {
             result = joinPoint.proceed();
+            long durationMs = System.currentTimeMillis() - startTime;
 
             String newValue = result != null ? result.toString() : null;
-            auditService.record(username, action, resourceType, resourceId,
-                    null, null, oldValue, newValue, ip, "SUCCESS", null);
+
+            AuditLog log = new AuditLog();
+            log.setUsername(username != null ? username : "anonymous");
+            log.setAction(action);
+            log.setResourceType(resourceType);
+            log.setResourceId(resourceId);
+            log.setOldValue(oldValue);
+            log.setNewValue(newValue);
+            log.setIpAddress(ip);
+            log.setUserAgent(AuditContext.getUserAgent());
+            log.setRequestMethod(AuditContext.getRequestMethod());
+            log.setRequestUri(AuditContext.getRequestUri());
+            log.setSessionId(AuditContext.getSessionId());
+            log.setDurationMs(durationMs);
+            log.setResult("SUCCESS");
+            auditLogRepository.save(log);
 
             return result;
         } catch (Throwable ex) {
-            auditService.record(username, action, resourceType, resourceId,
-                    null, null, oldValue, null, ip, "FAILURE", ex.getMessage());
+            long durationMs = System.currentTimeMillis() - startTime;
+
+            AuditLog log = new AuditLog();
+            log.setUsername(username != null ? username : "anonymous");
+            log.setAction(action);
+            log.setResourceType(resourceType);
+            log.setResourceId(resourceId);
+            log.setOldValue(oldValue);
+            log.setIpAddress(ip);
+            log.setUserAgent(AuditContext.getUserAgent());
+            log.setRequestMethod(AuditContext.getRequestMethod());
+            log.setRequestUri(AuditContext.getRequestUri());
+            log.setSessionId(AuditContext.getSessionId());
+            log.setDurationMs(durationMs);
+            log.setResult("FAILURE");
+            log.setErrorMessage(ex.getMessage());
+            auditLogRepository.save(log);
+
             throw ex;
         }
     }
