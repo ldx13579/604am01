@@ -136,7 +136,7 @@ public class GrayscaleService {
     @Scheduled(fixedDelay = 60000)
     @Transactional
     public void markOfflineClients() {
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(2);
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(5);
         List<ClientInstance> staleClients = clientInstanceRepo.findByLastHeartbeatBefore(threshold);
         for (ClientInstance client : staleClients) {
             if ("ONLINE".equals(client.getStatus())) {

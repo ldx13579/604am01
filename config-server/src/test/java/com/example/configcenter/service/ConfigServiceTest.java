@@ -49,6 +49,7 @@ class ConfigServiceTest {
     void updateConfig_shouldIncrementVersion() {
         ConfigUpdateRequest updateReq = new ConfigUpdateRequest();
         updateReq.setConfigValue("updated-app");
+        updateReq.setExpectedVersion(1L);
 
         ConfigItemDTO updated = configService.updateConfig(createdConfig.getId(), updateReq);
 
@@ -68,10 +69,12 @@ class ConfigServiceTest {
     void versionHistory_shouldTrackAllChanges() {
         ConfigUpdateRequest update1 = new ConfigUpdateRequest();
         update1.setConfigValue("v2");
+        update1.setExpectedVersion(1L);
         configService.updateConfig(createdConfig.getId(), update1);
 
         ConfigUpdateRequest update2 = new ConfigUpdateRequest();
         update2.setConfigValue("v3");
+        update2.setExpectedVersion(2L);
         configService.updateConfig(createdConfig.getId(), update2);
 
         List<ConfigVersion> history = configService.getVersionHistory(createdConfig.getId());
@@ -86,10 +89,12 @@ class ConfigServiceTest {
     void rollback_shouldRestoreValueAndCreateNewVersion() {
         ConfigUpdateRequest update1 = new ConfigUpdateRequest();
         update1.setConfigValue("v2-value");
+        update1.setExpectedVersion(1L);
         configService.updateConfig(createdConfig.getId(), update1);
 
         ConfigUpdateRequest update2 = new ConfigUpdateRequest();
         update2.setConfigValue("v3-value");
+        update2.setExpectedVersion(2L);
         configService.updateConfig(createdConfig.getId(), update2);
 
         // Rollback to version 1 (original value "test-app")
@@ -117,6 +122,7 @@ class ConfigServiceTest {
         // Update only dev
         ConfigUpdateRequest devUpdate = new ConfigUpdateRequest();
         devUpdate.setConfigValue("dev-updated");
+        devUpdate.setExpectedVersion(createdConfig.getVersion());
         configService.updateConfig(createdConfig.getId(), devUpdate);
 
         Long newDevVersion = configService.getCurrentVersion("dev", "default");
@@ -132,6 +138,7 @@ class ConfigServiceTest {
 
         ConfigUpdateRequest update = new ConfigUpdateRequest();
         update.setConfigValue("new-value");
+        update.setExpectedVersion(createdConfig.getVersion());
         configService.updateConfig(createdConfig.getId(), update);
 
         Long v2 = configService.getCurrentVersion("dev", "default");

@@ -7,6 +7,8 @@ import com.example.configcenter.exception.ConfigNotFoundException;
 import com.example.configcenter.exception.ConfigAlreadyExistsException;
 import com.example.configcenter.exception.VersionNotFoundException;
 import com.example.configcenter.mq.ConfigChangePublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,8 @@ import java.util.List;
 
 @Service
 public class ConfigServiceImpl implements ConfigService {
+
+    private static final Logger log = LoggerFactory.getLogger(ConfigServiceImpl.class);
 
     private final ConfigItemRepository configItemRepo;
     private final ConfigVersionRepository configVersionRepo;
@@ -78,7 +82,7 @@ public class ConfigServiceImpl implements ConfigService {
         ConfigItem item = configItemRepo.findById(id)
                 .orElseThrow(() -> new ConfigNotFoundException("Config not found: " + id));
 
-        if (request.getExpectedVersion() != null && !request.getExpectedVersion().equals(item.getVersion())) {
+        if (!request.getExpectedVersion().equals(item.getVersion())) {
             throw new com.example.configcenter.exception.VersionConflictException(
                     "Version conflict: expected " + request.getExpectedVersion() + ", current " + item.getVersion());
         }
@@ -180,8 +184,14 @@ public class ConfigServiceImpl implements ConfigService {
 
     private void publishChange(String environment, String namespace, Long version, String operation) {
         if (changePublisher != null) {
-            changePublisher.publishChange(environment, namespace, version, operation);
+            try {
+                changePublisher.publishChange(environment, namespace, version, operation);
+            } catch (Exception e) {
+                log.warn("RabbitMQ publish failed, falling back to local notification. Reason: {}", e.getMessage());
+                notificationService.notifyChange(environment, namespace);
+            }
         } else {
+            log.warn("RabbitMQ is not configured. Config change events are only broadcast locally.");
             notificationService.notifyChange(environment, namespace);
         }
     }

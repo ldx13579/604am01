@@ -268,7 +268,7 @@ const formatTime = (time) => {
 
 onMounted(() => {
   loadData()
-  refreshTimer = setInterval(loadClients, 10000)
+  refreshTimer = setInterval(loadClients, 30000)
 })
 
 onUnmounted(() => {

@@ -119,7 +119,7 @@ const showCreateDialog = () => {
 const showEditDialog = (row) => {
   isEdit.value = true
   editId.value = row.id
-  form.value = { configKey: row.configKey, configValue: row.configValue, description: row.description, environment: row.environment, namespace: row.namespace }
+  form.value = { configKey: row.configKey, configValue: row.configValue, description: row.description, environment: row.environment, namespace: row.namespace, version: row.version }
   dialogVisible.value = true
 }
 
@@ -129,7 +129,7 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (isEdit.value) {
-      await updateConfig(editId.value, { configValue: form.value.configValue, description: form.value.description })
+      await updateConfig(editId.value, { configValue: form.value.configValue, description: form.value.description, expectedVersion: form.value.version })
       ElMessage.success('更新成功')
     } else {
       await createConfig(form.value)

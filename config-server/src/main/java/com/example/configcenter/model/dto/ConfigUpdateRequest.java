@@ -1,6 +1,7 @@
 package com.example.configcenter.model.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 public class ConfigUpdateRequest {
 
@@ -9,6 +10,7 @@ public class ConfigUpdateRequest {
 
     private String description;
 
+    @NotNull(message = "expectedVersion is required for conflict detection")
     private Long expectedVersion;
 
     public String getConfigValue() { return configValue; }
