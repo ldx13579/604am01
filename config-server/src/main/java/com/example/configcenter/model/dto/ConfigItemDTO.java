@@ -14,6 +14,8 @@ public class ConfigItemDTO {
     private Long version;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private LocalDateTime lastPulledAt;
+    private Boolean zombie;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -44,4 +46,10 @@ public class ConfigItemDTO {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public LocalDateTime getLastPulledAt() { return lastPulledAt; }
+    public void setLastPulledAt(LocalDateTime lastPulledAt) { this.lastPulledAt = lastPulledAt; }
+
+    public Boolean getZombie() { return zombie; }
+    public void setZombie(Boolean zombie) { this.zombie = zombie; }
 }

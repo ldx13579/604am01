@@ -74,3 +74,15 @@ export const changePassword = (oldPassword, newPassword) =>
 
 export const refreshToken = () =>
   api.post('/auth/refresh')
+
+export const getZombieConfigs = (env, ns = 'default') =>
+  api.get('/zombies', { params: { env, ns } })
+
+export const cleanupZombie = (id) =>
+  api.delete(`/zombies/${id}`)
+
+export const getChangeTestLogs = (configItemId) =>
+  api.get(`/change-tests/${configItemId}`)
+
+export const getChangeTestFailures = () =>
+  api.get('/change-tests/failures')

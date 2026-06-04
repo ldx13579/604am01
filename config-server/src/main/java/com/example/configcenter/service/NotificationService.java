@@ -73,6 +73,10 @@ public class NotificationService {
         }
     }
 
+    public int getActiveHolderCount() {
+        return holders.values().stream().mapToInt(CopyOnWriteArrayList::size).sum();
+    }
+
     private void removeHolder(String key, DeferredResult<PollingResponse> result) {
         CopyOnWriteArrayList<DeferredResult<PollingResponse>> list = holders.get(key);
         if (list != null) {

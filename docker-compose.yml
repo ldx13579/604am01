@@ -62,5 +62,29 @@ services:
     depends_on:
       - config-server
 
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: config-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - config-server
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: config-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SERVER_ROOT_URL: http://localhost:3001
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+
 volumes:
   mysql-data:

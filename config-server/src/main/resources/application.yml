@@ -38,3 +38,23 @@ security:
   lockout:
     max-attempts: 5
     lock-duration-minutes: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: config-center
+
+zombie:
+  detection:
+    threshold-days: 30
+
+config:
+  change-test:
+    enabled: true

@@ -7,6 +7,7 @@ import com.example.configcenter.exception.ConfigNotFoundException;
 import com.example.configcenter.exception.ConfigAlreadyExistsException;
 import com.example.configcenter.exception.VersionNotFoundException;
 import com.example.configcenter.exception.ValidationFailedException;
+import com.example.configcenter.metrics.MetricsService;
 import com.example.configcenter.mq.ConfigChangePublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,12 @@ public class ConfigServiceImpl implements ConfigService {
 
     @Autowired(required = false)
     private ValidationService validationService;
+
+    @Autowired(required = false)
+    private MetricsService metricsService;
+
+    @Autowired(required = false)
+    private ConfigChangeTestService configChangeTestService;
 
     public ConfigServiceImpl(ConfigItemRepository configItemRepo,
                              ConfigVersionRepository configVersionRepo,
@@ -134,6 +141,17 @@ public class ConfigServiceImpl implements ConfigService {
         item = configItemRepo.save(item);
 
         saveVersionHistory(item, "UPDATE");
+
+        if (configChangeTestService != null) {
+            boolean passed = configChangeTestService.testConfigChange(
+                    item.getId(), item.getConfigKey(), request.getConfigValue(),
+                    item.getEnvironment(), item.getNamespace(), request.getExpectedVersion());
+            if (!passed) {
+                ConfigItemDTO rolledBack = rollback(item.getId(), request.getExpectedVersion());
+                return rolledBack;
+            }
+        }
+
         publishChange(item.getEnvironment(), item.getNamespace(), newVersion, "UPDATE");
 
         return toDTO(item);
@@ -220,6 +238,9 @@ public class ConfigServiceImpl implements ConfigService {
     }
 
     private void publishChange(String environment, String namespace, Long version, String operation) {
+        if (metricsService != null) {
+            metricsService.recordConfigChange(environment, operation);
+        }
         if (changePublisher != null) {
             try {
                 changePublisher.publishChange(environment, namespace, version, operation);
@@ -251,6 +272,8 @@ public class ConfigServiceImpl implements ConfigService {
         dto.setEncrypted(item.getEncrypted());
         dto.setCreatedAt(item.getCreatedAt());
         dto.setUpdatedAt(item.getUpdatedAt());
+        dto.setLastPulledAt(item.getLastPulledAt());
+        dto.setZombie(item.getZombie());
         return dto;
     }
 }

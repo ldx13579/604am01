@@ -10,6 +10,8 @@ CREATE TABLE config_item (
     description     VARCHAR(500) DEFAULT '',
     encrypted       TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否加密存储',
     version         BIGINT NOT NULL DEFAULT 1,
+    last_pulled_at  DATETIME DEFAULT NULL COMMENT '最近被客户端拉取时间',
+    zombie          TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否为僵尸配置',
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_key_env_ns (config_key, environment, namespace)
@@ -234,3 +236,36 @@ INSERT INTO security_rule (rule_type, rule_value, description, severity) VALUES
 ('SUSPICIOUS_PATTERN', '(\\bexec\\s*\\()', '检测exec调用', 'HIGH'),
 ('SUSPICIOUS_PATTERN', '(\\b__proto__\\b)', '检测原型链操纵', 'HIGH'),
 ('SUSPICIOUS_PATTERN', '(\\bconstructor\\b\\s*\\[)', '检测constructor利用', 'HIGH');
+
+-- ===================== 配置拉取记录 =====================
+
+CREATE TABLE config_pull_record (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    config_item_id  BIGINT NOT NULL,
+    client_ip       VARCHAR(50) NOT NULL,
+    environment     VARCHAR(20) NOT NULL,
+    namespace       VARCHAR(100) NOT NULL DEFAULT 'default',
+    pulled_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_config_item (config_item_id),
+    INDEX idx_pulled_at (pulled_at)
+) ENGINE=InnoDB;
+
+-- ===================== 配置变更测试日志 =====================
+
+CREATE TABLE config_change_test_log (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    config_item_id  BIGINT NOT NULL,
+    config_key      VARCHAR(255) NOT NULL,
+    environment     VARCHAR(20) NOT NULL,
+    namespace       VARCHAR(100) NOT NULL DEFAULT 'default',
+    new_value       TEXT NOT NULL,
+    test_result     VARCHAR(20) NOT NULL COMMENT 'PASS / FAIL / ERROR',
+    error_message   TEXT,
+    rolled_back     TINYINT(1) NOT NULL DEFAULT 0,
+    rollback_version BIGINT COMMENT '回滚到的版本号',
+    duration_ms     BIGINT,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_config_item (config_item_id),
+    INDEX idx_result (test_result),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB;

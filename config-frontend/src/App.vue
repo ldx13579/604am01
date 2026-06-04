@@ -10,6 +10,7 @@
             <router-link v-if="auth.isAdmin()" to="/users" class="nav-link">权限管理</router-link>
             <router-link v-if="auth.isAdmin()" to="/audit" class="nav-link">审计日志</router-link>
             <router-link to="/validation" class="nav-link">校验脚本</router-link>
+            <router-link to="/monitoring" class="nav-link">监控面板</router-link>
           </nav>
           <div class="header-user">
             <span class="username">{{ auth.state.user?.displayName || auth.state.user?.username }}</span>

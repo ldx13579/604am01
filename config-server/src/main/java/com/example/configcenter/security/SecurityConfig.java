@@ -42,6 +42,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login").permitAll()
+                .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(request -> securityPathService.isPublicPath(request.getRequestURI())).permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()

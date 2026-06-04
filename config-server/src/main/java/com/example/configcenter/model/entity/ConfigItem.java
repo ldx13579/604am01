@@ -34,6 +34,12 @@ public class ConfigItem {
     @Column(nullable = false)
     private Long version = 1L;
 
+    @Column(name = "last_pulled_at")
+    private LocalDateTime lastPulledAt;
+
+    @Column(nullable = false)
+    private Boolean zombie = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -77,4 +83,10 @@ public class ConfigItem {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
+
+    public LocalDateTime getLastPulledAt() { return lastPulledAt; }
+    public void setLastPulledAt(LocalDateTime lastPulledAt) { this.lastPulledAt = lastPulledAt; }
+
+    public Boolean getZombie() { return zombie; }
+    public void setZombie(Boolean zombie) { this.zombie = zombie; }
 }

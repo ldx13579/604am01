@@ -26,3 +26,17 @@ jwt:
 
 encryption:
   master-key: TestMasterKey32BytesLong12345678
+
+zombie:
+  detection:
+    threshold-days: 30
+
+config:
+  change-test:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
