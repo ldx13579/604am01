@@ -326,3 +326,92 @@ CREATE TABLE zombie_cleanup_log (
     INDEX idx_env_ns (environment, namespace),
     INDEX idx_cleanup_at (created_at)
 ) ENGINE=InnoDB;
+
+-- ===================== 告警升级策略 =====================
+
+CREATE TABLE alert_escalation_policy (
+    id                       BIGINT AUTO_INCREMENT PRIMARY KEY,
+    policy_name              VARCHAR(200) NOT NULL,
+    severity                 VARCHAR(20) NOT NULL COMMENT 'CRITICAL / WARNING / INFO',
+    role_group               VARCHAR(50) NOT NULL COMMENT '角色组: OPS_ONCALL / TEAM_LEAD / DEVELOPER',
+    escalation_level         INT NOT NULL COMMENT '升级层级，从1开始',
+    escalation_delay_minutes INT NOT NULL DEFAULT 0 COMMENT '升级前等待时间',
+    notify_channels          VARCHAR(500) NOT NULL COMMENT '通知渠道: LOG,WEBHOOK,EMAIL,SMS',
+    enabled                  TINYINT(1) NOT NULL DEFAULT 1,
+    created_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_severity_level (severity, escalation_level)
+) ENGINE=InnoDB;
+
+CREATE TABLE alert_subscriber (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name                VARCHAR(100) NOT NULL,
+    role_group          VARCHAR(50) NOT NULL COMMENT '角色组: OPS_ONCALL / TEAM_LEAD / DEVELOPER',
+    email               VARCHAR(200),
+    webhook_url         VARCHAR(500),
+    phone_number        VARCHAR(20),
+    preferred_channels  VARCHAR(200) NOT NULL DEFAULT 'LOG' COMMENT '偏好渠道: LOG,EMAIL,WEBHOOK,SMS',
+    quiet_hours_start   VARCHAR(5) COMMENT '免打扰开始时间 HH:mm',
+    quiet_hours_end     VARCHAR(5) COMMENT '免打扰结束时间 HH:mm',
+    enabled             TINYINT(1) NOT NULL DEFAULT 1,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_role_group (role_group)
+) ENGINE=InnoDB;
+
+-- 预置升级策略: INFO→DEVELOPER, WARNING→TEAM_LEAD, CRITICAL→OPS_ONCALL
+INSERT INTO alert_escalation_policy (policy_name, severity, role_group, escalation_level, escalation_delay_minutes, notify_channels) VALUES
+('INFO级-开发人员通知', 'INFO', 'DEVELOPER', 1, 0, 'LOG,EMAIL'),
+('WARNING级-团队负责人通知', 'WARNING', 'TEAM_LEAD', 1, 0, 'LOG,EMAIL,WEBHOOK'),
+('WARNING级-升级到运维', 'WARNING', 'OPS_ONCALL', 2, 15, 'LOG,EMAIL,WEBHOOK,SMS'),
+('CRITICAL级-运维值班通知', 'CRITICAL', 'OPS_ONCALL', 1, 0, 'LOG,EMAIL,WEBHOOK,SMS'),
+('CRITICAL级-升级到团队负责人', 'CRITICAL', 'TEAM_LEAD', 2, 5, 'LOG,EMAIL,WEBHOOK');
+
+-- 预置订阅人
+INSERT INTO alert_subscriber (name, role_group, email, preferred_channels) VALUES
+('开发人员A', 'DEVELOPER', 'dev-a@example.com', 'LOG,EMAIL'),
+('开发人员B', 'DEVELOPER', 'dev-b@example.com', 'LOG,EMAIL'),
+('团队负责人', 'TEAM_LEAD', 'lead@example.com', 'LOG,EMAIL,WEBHOOK'),
+('运维值班-张工', 'OPS_ONCALL', 'ops-zhang@example.com', 'LOG,EMAIL,WEBHOOK,SMS'),
+('运维值班-李工', 'OPS_ONCALL', 'ops-li@example.com', 'LOG,EMAIL,WEBHOOK,SMS');
+
+-- ===================== 清理策略组合规则 =====================
+
+CREATE TABLE cleanup_policy (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    policy_name         VARCHAR(200) NOT NULL,
+    environment         VARCHAR(20) COMMENT '匹配的环境，NULL表示所有',
+    namespace           VARCHAR(100) COMMENT '匹配的命名空间，NULL表示所有',
+    key_pattern         VARCHAR(200) COMMENT '配置键匹配模式（支持*通配符）',
+    min_age_days        INT COMMENT '最小未使用天数',
+    max_value_size_bytes INT COMMENT '配置值超过此大小才匹配',
+    min_value_size_bytes INT COMMENT '配置值低于此大小才匹配',
+    require_zombie      TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否要求已标记为僵尸',
+    condition_logic     VARCHAR(10) NOT NULL DEFAULT 'AND' COMMENT 'AND: 所有条件都满足 / OR: 任一条件满足',
+    cleanup_action      VARCHAR(20) NOT NULL DEFAULT 'ARCHIVED' COMMENT 'ARCHIVED / DELETED',
+    priority            INT NOT NULL DEFAULT 0 COMMENT '优先级，高优先匹配',
+    enabled             TINYINT(1) NOT NULL DEFAULT 1,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 预置清理策略
+INSERT INTO cleanup_policy (policy_name, environment, key_pattern, min_age_days, require_zombie, condition_logic, cleanup_action, priority) VALUES
+('开发环境90天未用配置归档', 'dev', NULL, 90, 1, 'AND', 'ARCHIVED', 10),
+('临时配置60天清理', NULL, 'tmp.*', 60, 0, 'AND', 'DELETED', 20),
+('测试环境大配置清理', 'test', NULL, 30, 1, 'AND', 'DELETED', 5);
+
+-- ===================== 测试结果智能分析 =====================
+
+CREATE TABLE test_analysis_result (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    test_log_id         BIGINT NOT NULL,
+    problem_category    VARCHAR(50) NOT NULL COMMENT 'VALIDATION_ERROR / FORMAT_ERROR / OVERFLOW_ERROR / ENCODING_ERROR / TIMEOUT_ERROR / SCRIPT_ERROR / SECURITY_ERROR / DEPENDENCY_ERROR / INFRASTRUCTURE_ERROR / UNKNOWN',
+    root_cause          VARCHAR(500) COMMENT '推测的根因',
+    suggestion          VARCHAR(1000) COMMENT '修复建议',
+    confidence          DOUBLE NOT NULL COMMENT '置信度 0.0~1.0',
+    matched_pattern     VARCHAR(200) COMMENT '匹配的分析规则名称',
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_test_log (test_log_id),
+    INDEX idx_category (problem_category),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB;

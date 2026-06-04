@@ -42,6 +42,9 @@ public class ZombieDetectionService {
     @Autowired(required = false)
     private MetricsService metricsService;
 
+    @Autowired(required = false)
+    private CleanupPolicyService cleanupPolicyService;
+
     public ZombieDetectionService(ConfigItemRepository configItemRepo,
                                    ConfigPullRecordRepository pullRecordRepo,
                                    ZombieCleanupLogRepository cleanupLogRepo) {
@@ -94,6 +97,14 @@ public class ZombieDetectionService {
         if (!autoCleanupEnabled) {
             log.info("Auto-cleanup disabled, skipping");
             return;
+        }
+
+        if (cleanupPolicyService != null) {
+            int policyCleaned = cleanupPolicyService.applyPolicies();
+            if (policyCleaned > 0) {
+                log.info("Cleanup policies handled {} items, skipping default cleanup", policyCleaned);
+                return;
+            }
         }
 
         LocalDateTime gracePeriodThreshold = LocalDateTime.now().minusDays(gracePeriodDays);

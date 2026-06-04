@@ -22,6 +22,9 @@ public class ConfigChangeTestService {
     @Autowired(required = false)
     private MetricsService metricsService;
 
+    @Autowired(required = false)
+    private TestResultAnalyzer testResultAnalyzer;
+
     public ConfigChangeTestService(ConfigChangeTestLogRepository testLogRepo) {
         this.testLogRepo = testLogRepo;
     }
@@ -58,8 +61,9 @@ public class ConfigChangeTestService {
                 logEntry.setRolledBack(true);
                 logEntry.setRollbackVersion(previousVersion);
                 logEntry.setDurationMs(System.currentTimeMillis() - start);
-                testLogRepo.save(logEntry);
+                ConfigChangeTestLog saved = testLogRepo.save(logEntry);
                 recordMetric("FAIL");
+                analyzeResult(saved);
                 log.warn("Config change test FAILED for key={}, env={}, ns={}. Auto-rolling back to version {}",
                         configKey, env, ns, previousVersion);
                 return false;
@@ -75,8 +79,9 @@ public class ConfigChangeTestService {
             logEntry.setTestResult("ERROR");
             logEntry.setErrorMessage(e.getMessage());
             logEntry.setDurationMs(System.currentTimeMillis() - start);
-            testLogRepo.save(logEntry);
+            ConfigChangeTestLog saved = testLogRepo.save(logEntry);
             recordMetric("ERROR");
+            analyzeResult(saved);
             log.error("Config change test ERROR for key={}: {}", configKey, e.getMessage());
             return true;
         }
@@ -85,6 +90,16 @@ public class ConfigChangeTestService {
     private void recordMetric(String result) {
         if (metricsService != null) {
             metricsService.recordChangeTestResult(result);
+        }
+    }
+
+    private void analyzeResult(ConfigChangeTestLog logEntry) {
+        if (testResultAnalyzer != null && !"PASS".equals(logEntry.getTestResult())) {
+            try {
+                testResultAnalyzer.analyze(logEntry);
+            } catch (Exception e) {
+                log.debug("Test result analysis failed: {}", e.getMessage());
+            }
         }
     }
 }

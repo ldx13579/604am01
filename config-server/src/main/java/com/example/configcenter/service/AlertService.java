@@ -39,6 +39,9 @@ public class AlertService {
     @Autowired(required = false)
     private NotificationService notificationService;
 
+    @Autowired(required = false)
+    private AlertEscalationService escalationService;
+
     public AlertService(AlertRuleRepository alertRuleRepo,
                         AlertHistoryRepository alertHistoryRepo) {
         this.alertRuleRepo = alertRuleRepo;
@@ -122,14 +125,25 @@ public class AlertService {
         history.setSeverity(rule.getSeverity());
         history.setNotifyChannels(rule.getNotifyChannels());
 
-        String[] channels = rule.getNotifyChannels().split(",");
         StringBuilder errors = new StringBuilder();
 
-        for (String channel : channels) {
-            try {
-                sendNotification(channel.trim(), rule, currentValue);
-            } catch (Exception e) {
-                errors.append(channel).append(": ").append(e.getMessage()).append("; ");
+        if (escalationService != null) {
+            List<AlertEscalationService.NotificationResult> escalationResults =
+                    escalationService.routeAlert(rule, currentValue);
+            for (AlertEscalationService.NotificationResult nr : escalationResults) {
+                if (!nr.success()) {
+                    errors.append(nr.channel()).append("→").append(nr.subscriber())
+                            .append(": ").append(nr.error()).append("; ");
+                }
+            }
+        } else {
+            String[] channels = rule.getNotifyChannels().split(",");
+            for (String channel : channels) {
+                try {
+                    sendNotification(channel.trim(), rule, currentValue);
+                } catch (Exception e) {
+                    errors.append(channel).append(": ").append(e.getMessage()).append("; ");
+                }
             }
         }
 
