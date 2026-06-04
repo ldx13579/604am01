@@ -1,13 +1,20 @@
 <template>
   <div id="app">
     <el-container>
-      <el-header>
+      <el-header v-if="auth.state.isAuthenticated">
         <div class="header-content">
           <h1>分布式配置中心</h1>
           <nav class="header-nav">
             <router-link to="/" class="nav-link">配置管理</router-link>
             <router-link to="/grayscale" class="nav-link">灰度发布</router-link>
+            <router-link v-if="auth.isAdmin()" to="/users" class="nav-link">权限管理</router-link>
+            <router-link v-if="auth.isAdmin()" to="/audit" class="nav-link">审计日志</router-link>
+            <router-link to="/validation" class="nav-link">校验脚本</router-link>
           </nav>
+          <div class="header-user">
+            <span class="username">{{ auth.state.user?.displayName || auth.state.user?.username }}</span>
+            <el-button type="default" size="small" @click="handleLogout">退出</el-button>
+          </div>
         </div>
       </el-header>
       <el-main>
@@ -18,6 +25,15 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
+import auth from './store/auth'
+
+const router = useRouter()
+
+function handleLogout() {
+  auth.logout()
+  router.push('/login')
+}
 </script>
 
 <style>
@@ -41,6 +57,19 @@ body {
   align-items: center;
   gap: 32px;
   width: 100%;
+  justify-content: flex-start;
+}
+
+.header-user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-user .username {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .header-content h1 {

@@ -25,3 +25,10 @@ spring.mvc.async.request-timeout: 35000
 grayscale:
   client:
     offline-threshold-minutes: 3
+
+jwt:
+  secret: MyConfigCenterJwtSecretKey2024ForHS256MustBe32BytesLong!!
+  expiration-ms: 86400000
+
+encryption:
+  master-key: AES256MasterKey32BytesLong123456

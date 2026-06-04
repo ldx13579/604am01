@@ -4,20 +4,14 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "config_item", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"config_key", "environment", "namespace"})
+@Table(name = "validation_script", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"environment", "namespace", "script_name"})
 })
-public class ConfigItem {
+public class ValidationScript {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(name = "config_key", nullable = false)
-    private String configKey;
-
-    @Column(name = "config_value", nullable = false, columnDefinition = "TEXT")
-    private String configValue;
 
     @Column(nullable = false, length = 20)
     private String environment;
@@ -25,14 +19,14 @@ public class ConfigItem {
     @Column(nullable = false, length = 100)
     private String namespace = "default";
 
-    @Column(length = 500)
-    private String description = "";
+    @Column(name = "script_name", nullable = false, length = 200)
+    private String scriptName;
+
+    @Column(name = "script_content", nullable = false, columnDefinition = "TEXT")
+    private String scriptContent;
 
     @Column(nullable = false)
-    private Boolean encrypted = false;
-
-    @Column(nullable = false)
-    private Long version = 1L;
+    private Boolean enabled = true;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -54,26 +48,20 @@ public class ConfigItem {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public String getConfigKey() { return configKey; }
-    public void setConfigKey(String configKey) { this.configKey = configKey; }
-
-    public String getConfigValue() { return configValue; }
-    public void setConfigValue(String configValue) { this.configValue = configValue; }
-
     public String getEnvironment() { return environment; }
     public void setEnvironment(String environment) { this.environment = environment; }
 
     public String getNamespace() { return namespace; }
     public void setNamespace(String namespace) { this.namespace = namespace; }
 
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
+    public String getScriptName() { return scriptName; }
+    public void setScriptName(String scriptName) { this.scriptName = scriptName; }
 
-    public Boolean getEncrypted() { return encrypted; }
-    public void setEncrypted(Boolean encrypted) { this.encrypted = encrypted; }
+    public String getScriptContent() { return scriptContent; }
+    public void setScriptContent(String scriptContent) { this.scriptContent = scriptContent; }
 
-    public Long getVersion() { return version; }
-    public void setVersion(Long version) { this.version = version; }
+    public Boolean getEnabled() { return enabled; }
+    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

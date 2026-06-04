@@ -1,9 +1,28 @@
 import axios from 'axios'
+import auth from '../store/auth'
+import router from '../router/index'
 
 const api = axios.create({
   baseURL: '/api',
   timeout: 10000
 })
+
+api.interceptors.request.use(config => {
+  const token = auth.getToken()
+  if (token) config.headers.Authorization = 'Bearer ' + token
+  return config
+})
+
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response && error.response.status === 401) {
+      auth.logout()
+      router.push('/login')
+    }
+    return Promise.reject(error)
+  }
+)
 
 export const getConfigs = (env, ns = 'default') =>
   api.get('/configs', { params: { env, ns } })

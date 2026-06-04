@@ -17,6 +17,8 @@ public class ConfigCreateRequest {
 
     private String description = "";
 
+    private Boolean encrypted = false;
+
     public String getConfigKey() { return configKey; }
     public void setConfigKey(String configKey) { this.configKey = configKey; }
 
@@ -31,4 +33,7 @@ public class ConfigCreateRequest {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public Boolean getEncrypted() { return encrypted; }
+    public void setEncrypted(Boolean encrypted) { this.encrypted = encrypted; }
 }

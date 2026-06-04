@@ -6,6 +6,7 @@ import com.example.configcenter.repository.*;
 import com.example.configcenter.exception.ConfigNotFoundException;
 import com.example.configcenter.exception.ConfigAlreadyExistsException;
 import com.example.configcenter.exception.VersionNotFoundException;
+import com.example.configcenter.exception.ValidationFailedException;
 import com.example.configcenter.mq.ConfigChangePublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,12 @@ public class ConfigServiceImpl implements ConfigService {
 
     @Autowired(required = false)
     private ConfigChangePublisher changePublisher;
+
+    @Autowired(required = false)
+    private EncryptionService encryptionService;
+
+    @Autowired(required = false)
+    private ValidationService validationService;
 
     public ConfigServiceImpl(ConfigItemRepository configItemRepo,
                              ConfigVersionRepository configVersionRepo,
@@ -59,14 +66,30 @@ public class ConfigServiceImpl implements ConfigService {
             throw new ConfigAlreadyExistsException("Config key already exists in this environment/namespace");
         }
 
+        if (validationService != null) {
+            ValidationResult result = validationService.validate(
+                    request.getConfigKey(), request.getConfigValue(),
+                    request.getEnvironment(), request.getNamespace());
+            if (!result.isValid()) {
+                throw new ValidationFailedException(result.getMessage());
+            }
+        }
+
         Long newVersion = incrementVersion(request.getEnvironment(), request.getNamespace());
+
+        String valueToStore = request.getConfigValue();
+        boolean encrypted = Boolean.TRUE.equals(request.getEncrypted());
+        if (encrypted && encryptionService != null) {
+            valueToStore = encryptionService.encrypt(valueToStore, request.getEnvironment(), request.getNamespace());
+        }
 
         ConfigItem item = new ConfigItem();
         item.setConfigKey(request.getConfigKey());
-        item.setConfigValue(request.getConfigValue());
+        item.setConfigValue(valueToStore);
         item.setEnvironment(request.getEnvironment());
         item.setNamespace(request.getNamespace());
         item.setDescription(request.getDescription());
+        item.setEncrypted(encrypted);
         item.setVersion(newVersion);
         item = configItemRepo.save(item);
 
@@ -87,9 +110,23 @@ public class ConfigServiceImpl implements ConfigService {
                     "Version conflict: expected " + request.getExpectedVersion() + ", current " + item.getVersion());
         }
 
+        if (validationService != null) {
+            ValidationResult result = validationService.validate(
+                    item.getConfigKey(), request.getConfigValue(),
+                    item.getEnvironment(), item.getNamespace());
+            if (!result.isValid()) {
+                throw new ValidationFailedException(result.getMessage());
+            }
+        }
+
         Long newVersion = incrementVersion(item.getEnvironment(), item.getNamespace());
 
-        item.setConfigValue(request.getConfigValue());
+        String valueToStore = request.getConfigValue();
+        if (item.getEncrypted() && encryptionService != null) {
+            valueToStore = encryptionService.encrypt(valueToStore, item.getEnvironment(), item.getNamespace());
+        }
+
+        item.setConfigValue(valueToStore);
         if (request.getDescription() != null) {
             item.setDescription(request.getDescription());
         }
@@ -211,6 +248,7 @@ public class ConfigServiceImpl implements ConfigService {
         dto.setNamespace(item.getNamespace());
         dto.setDescription(item.getDescription());
         dto.setVersion(item.getVersion());
+        dto.setEncrypted(item.getEncrypted());
         dto.setCreatedAt(item.getCreatedAt());
         dto.setUpdatedAt(item.getUpdatedAt());
         return dto;
