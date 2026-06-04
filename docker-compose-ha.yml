@@ -1,0 +1,267 @@
+version: '3.8'
+
+services:
+  # ==================== Nginx Load Balancer ====================
+  nginx-lb:
+    image: nginx:alpine
+    container_name: config-nginx-lb
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ha/nginx-ha.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - config-server-1
+      - config-server-2
+      - config-server-3
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ==================== Config Server Cluster (3 nodes) ====================
+  config-server-1:
+    build: ./config-server
+    container_name: config-server-1
+    ports:
+      - "8081:8080"
+      - "9001:9000"
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-primary:3306/config_center?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_RABBITMQ_HOST: rabbitmq-1
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      RAFT_NODE_ID: node-1
+      RAFT_PORT: 9000
+      RAFT_PEERS: node-1:config-server-1:9000,node-2:config-server-2:9000,node-3:config-server-3:9000
+      JAVA_OPTS: -Xms512m -Xmx1024m -XX:+UseG1GC
+    depends_on:
+      mysql-primary:
+        condition: service_healthy
+      rabbitmq-1:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - config-cluster
+
+  config-server-2:
+    build: ./config-server
+    container_name: config-server-2
+    ports:
+      - "8082:8080"
+      - "9002:9000"
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-primary:3306/config_center?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_RABBITMQ_HOST: rabbitmq-1
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      RAFT_NODE_ID: node-2
+      RAFT_PORT: 9000
+      RAFT_PEERS: node-1:config-server-1:9000,node-2:config-server-2:9000,node-3:config-server-3:9000
+      JAVA_OPTS: -Xms512m -Xmx1024m -XX:+UseG1GC
+    depends_on:
+      mysql-primary:
+        condition: service_healthy
+      rabbitmq-1:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - config-cluster
+
+  config-server-3:
+    build: ./config-server
+    container_name: config-server-3
+    ports:
+      - "8083:8080"
+      - "9003:9000"
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-primary:3306/config_center?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_RABBITMQ_HOST: rabbitmq-1
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      RAFT_NODE_ID: node-3
+      RAFT_PORT: 9000
+      RAFT_PEERS: node-1:config-server-1:9000,node-2:config-server-2:9000,node-3:config-server-3:9000
+      JAVA_OPTS: -Xms512m -Xmx1024m -XX:+UseG1GC
+    depends_on:
+      mysql-primary:
+        condition: service_healthy
+      rabbitmq-1:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - config-cluster
+
+  # ==================== MySQL (Primary + Replica) ====================
+  mysql-primary:
+    image: mysql:8.0
+    container_name: config-mysql-primary
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: config_center
+    volumes:
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./ha/mysql/primary.cnf:/etc/mysql/conf.d/primary.cnf
+      - mysql-primary-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --server-id=1 --log-bin=mysql-bin --binlog-format=ROW
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - config-cluster
+
+  mysql-replica:
+    image: mysql:8.0
+    container_name: config-mysql-replica
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: config_center
+    volumes:
+      - ./ha/mysql/replica.cnf:/etc/mysql/conf.d/replica.cnf
+      - mysql-replica-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --server-id=2 --log-bin=mysql-bin --binlog-format=ROW --read-only=ON
+    depends_on:
+      mysql-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - config-cluster
+
+  # ==================== RabbitMQ Cluster ====================
+  rabbitmq-1:
+    image: rabbitmq:3.12-management
+    container_name: config-rabbitmq-1
+    hostname: rabbit-1
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_ERLANG_COOKIE: 'config-center-cluster-cookie-2024'
+    volumes:
+      - ./ha/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - rabbitmq-1-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - config-cluster
+
+  rabbitmq-2:
+    image: rabbitmq:3.12-management
+    container_name: config-rabbitmq-2
+    hostname: rabbit-2
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_ERLANG_COOKIE: 'config-center-cluster-cookie-2024'
+    volumes:
+      - ./ha/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+      - rabbitmq-2-data:/var/lib/rabbitmq
+    depends_on:
+      rabbitmq-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - config-cluster
+
+  # ==================== Monitoring Stack ====================
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: config-prometheus-ha
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ha/prometheus-ha.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - config-server-1
+      - config-server-2
+      - config-server-3
+    networks:
+      - config-cluster
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: config-grafana-ha
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SERVER_ROOT_URL: http://localhost:3001
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - config-cluster
+
+  # ==================== Frontend ====================
+  config-frontend:
+    build: ./config-frontend
+    container_name: config-frontend-ha
+    ports:
+      - "3000:80"
+    depends_on:
+      - nginx-lb
+    networks:
+      - config-cluster
+
+volumes:
+  mysql-primary-data:
+  mysql-replica-data:
+  rabbitmq-1-data:
+  rabbitmq-2-data:
+
+networks:
+  config-cluster:
+    driver: bridge

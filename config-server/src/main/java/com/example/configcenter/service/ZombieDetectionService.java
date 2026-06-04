@@ -3,8 +3,10 @@ package com.example.configcenter.service;
 import com.example.configcenter.metrics.MetricsService;
 import com.example.configcenter.model.dto.ConfigItemDTO;
 import com.example.configcenter.model.entity.ConfigItem;
+import com.example.configcenter.model.entity.ZombieCleanupLog;
 import com.example.configcenter.repository.ConfigItemRepository;
 import com.example.configcenter.repository.ConfigPullRecordRepository;
+import com.example.configcenter.repository.ZombieCleanupLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,16 +26,28 @@ public class ZombieDetectionService {
     @Value("${zombie.detection.threshold-days:30}")
     private int thresholdDays;
 
+    @Value("${zombie.cleanup.grace-period-days:60}")
+    private int gracePeriodDays;
+
+    @Value("${zombie.cleanup.auto-enabled:true}")
+    private boolean autoCleanupEnabled;
+
+    @Value("${zombie.cleanup.action:ARCHIVED}")
+    private String defaultCleanupAction;
+
     private final ConfigItemRepository configItemRepo;
     private final ConfigPullRecordRepository pullRecordRepo;
+    private final ZombieCleanupLogRepository cleanupLogRepo;
 
     @Autowired(required = false)
     private MetricsService metricsService;
 
     public ZombieDetectionService(ConfigItemRepository configItemRepo,
-                                   ConfigPullRecordRepository pullRecordRepo) {
+                                   ConfigPullRecordRepository pullRecordRepo,
+                                   ZombieCleanupLogRepository cleanupLogRepo) {
         this.configItemRepo = configItemRepo;
         this.pullRecordRepo = pullRecordRepo;
+        this.cleanupLogRepo = cleanupLogRepo;
     }
 
     @Transactional
@@ -71,13 +85,70 @@ public class ZombieDetectionService {
 
         log.info("Zombie detection completed: {} zombie configs found", zombieCount);
 
-        // Cleanup old pull records (keep 90 days)
         pullRecordRepo.deleteByPulledAtBefore(LocalDateTime.now().minusDays(90));
+    }
+
+    @Scheduled(cron = "0 30 3 * * ?")
+    @Transactional
+    public void autoCleanupZombies() {
+        if (!autoCleanupEnabled) {
+            log.info("Auto-cleanup disabled, skipping");
+            return;
+        }
+
+        LocalDateTime gracePeriodThreshold = LocalDateTime.now().minusDays(gracePeriodDays);
+        List<ConfigItem> expiredZombies = configItemRepo.findAll().stream()
+                .filter(item -> Boolean.TRUE.equals(item.getZombie()))
+                .filter(item -> {
+                    LocalDateTime lastActivity = item.getLastPulledAt() != null
+                            ? item.getLastPulledAt() : item.getCreatedAt();
+                    return lastActivity.isBefore(gracePeriodThreshold);
+                })
+                .toList();
+
+        int cleaned = 0;
+        for (ConfigItem item : expiredZombies) {
+            try {
+                ZombieCleanupLog cleanupLog = new ZombieCleanupLog();
+                cleanupLog.setConfigItemId(item.getId());
+                cleanupLog.setConfigKey(item.getConfigKey());
+                cleanupLog.setEnvironment(item.getEnvironment());
+                cleanupLog.setNamespace(item.getNamespace());
+                cleanupLog.setLastPulledAt(item.getLastPulledAt());
+                cleanupLog.setCleanupAction(defaultCleanupAction);
+                cleanupLogRepo.save(cleanupLog);
+
+                if ("DELETED".equals(defaultCleanupAction)) {
+                    configItemRepo.delete(item);
+                } else {
+                    item.setDescription("[ARCHIVED] " + item.getDescription());
+                    item.setConfigValue("__ARCHIVED__:" + item.getConfigValue());
+                    configItemRepo.save(item);
+                }
+                cleaned++;
+            } catch (Exception e) {
+                log.error("Failed to cleanup zombie config {}: {}", item.getConfigKey(), e.getMessage());
+            }
+        }
+
+        log.info("Zombie auto-cleanup completed: {}/{} configs cleaned (action={})",
+                cleaned, expiredZombies.size(), defaultCleanupAction);
     }
 
     public List<ConfigItemDTO> getZombieConfigs(String environment, String namespace) {
         return configItemRepo.findByEnvironmentAndNamespaceAndZombieTrue(environment, namespace)
                 .stream().map(this::toDTO).toList();
+    }
+
+    public List<ZombieCleanupLog> getCleanupHistory() {
+        return cleanupLogRepo.findTop50ByOrderByCreatedAtDesc();
+    }
+
+    public boolean shouldCleanup(ConfigItem item) {
+        if (!Boolean.TRUE.equals(item.getZombie())) return false;
+        LocalDateTime lastActivity = item.getLastPulledAt() != null
+                ? item.getLastPulledAt() : item.getCreatedAt();
+        return lastActivity.isBefore(LocalDateTime.now().minusDays(gracePeriodDays));
     }
 
     private ConfigItemDTO toDTO(ConfigItem item) {

@@ -1,6 +1,7 @@
 package com.example.configcenter.controller;
 
 import com.example.configcenter.model.dto.ConfigItemDTO;
+import com.example.configcenter.model.entity.ZombieCleanupLog;
 import com.example.configcenter.service.ConfigService;
 import com.example.configcenter.service.ZombieDetectionService;
 import org.springframework.web.bind.annotation.*;
@@ -35,5 +36,15 @@ public class ZombieController {
     @PostMapping("/detect")
     public void triggerDetection() {
         zombieDetectionService.detectZombies();
+    }
+
+    @PostMapping("/auto-cleanup")
+    public void triggerAutoCleanup() {
+        zombieDetectionService.autoCleanupZombies();
+    }
+
+    @GetMapping("/cleanup-history")
+    public List<ZombieCleanupLog> getCleanupHistory() {
+        return zombieDetectionService.getCleanupHistory();
     }
 }

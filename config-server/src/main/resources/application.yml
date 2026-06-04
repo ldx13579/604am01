@@ -54,7 +54,15 @@ management:
 zombie:
   detection:
     threshold-days: 30
+  cleanup:
+    grace-period-days: 60
+    auto-enabled: true
+    action: ARCHIVED
 
 config:
   change-test:
     enabled: true
+
+alert:
+  check:
+    interval-ms: 30000

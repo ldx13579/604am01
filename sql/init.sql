@@ -269,3 +269,60 @@ CREATE TABLE config_change_test_log (
     INDEX idx_result (test_result),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB;
+
+-- ===================== 告警规则与历史 =====================
+
+CREATE TABLE alert_rule (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    rule_name           VARCHAR(200) NOT NULL,
+    metric_name         VARCHAR(100) NOT NULL COMMENT '监控指标名: polling.active_clients / zombie.count / polling.failure_rate',
+    operator            VARCHAR(20) NOT NULL COMMENT 'GT / GTE / LT / LTE / EQ / NEQ',
+    threshold           DOUBLE NOT NULL,
+    severity            VARCHAR(20) NOT NULL DEFAULT 'WARNING' COMMENT 'CRITICAL / WARNING / INFO',
+    notify_channels     VARCHAR(500) NOT NULL DEFAULT 'LOG' COMMENT '通知渠道: LOG,WEBHOOK,EMAIL',
+    webhook_url         VARCHAR(500) COMMENT 'Webhook推送地址',
+    email_to            VARCHAR(500) COMMENT '邮件接收人,逗号分隔',
+    enabled             TINYINT(1) NOT NULL DEFAULT 1,
+    cooldown_minutes    INT NOT NULL DEFAULT 5 COMMENT '告警冷却时间(分钟)',
+    last_triggered_at   DATETIME,
+    trigger_count       BIGINT NOT NULL DEFAULT 0,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE alert_history (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    alert_rule_id       BIGINT NOT NULL,
+    rule_name           VARCHAR(200) NOT NULL,
+    metric_name         VARCHAR(100) NOT NULL,
+    metric_value        DOUBLE NOT NULL,
+    threshold           DOUBLE NOT NULL,
+    severity            VARCHAR(20) NOT NULL,
+    notify_channels     VARCHAR(500),
+    notify_status       VARCHAR(20) NOT NULL DEFAULT 'SUCCESS' COMMENT 'SUCCESS / PARTIAL_FAILURE / FAILED',
+    error_message       TEXT,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_rule_id (alert_rule_id),
+    INDEX idx_created_at (created_at),
+    INDEX idx_severity (severity)
+) ENGINE=InnoDB;
+
+INSERT INTO alert_rule (rule_name, metric_name, operator, threshold, severity, notify_channels, cooldown_minutes) VALUES
+('活跃客户端过多', 'polling.active_clients', 'GT', 200, 'WARNING', 'LOG,WEBHOOK', 10),
+('僵尸配置过多', 'zombie.count', 'GT', 20, 'WARNING', 'LOG', 60),
+('拉取失败率过高', 'polling.failure_rate', 'GT', 0.1, 'CRITICAL', 'LOG,WEBHOOK,EMAIL', 5);
+
+-- ===================== 僵尸配置清理历史 =====================
+
+CREATE TABLE zombie_cleanup_log (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    config_item_id  BIGINT NOT NULL,
+    config_key      VARCHAR(255) NOT NULL,
+    environment     VARCHAR(20) NOT NULL,
+    namespace       VARCHAR(100) NOT NULL DEFAULT 'default',
+    last_pulled_at  DATETIME,
+    cleanup_action  VARCHAR(20) NOT NULL COMMENT 'ARCHIVED / DELETED',
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_env_ns (environment, namespace),
+    INDEX idx_cleanup_at (created_at)
+) ENGINE=InnoDB;
