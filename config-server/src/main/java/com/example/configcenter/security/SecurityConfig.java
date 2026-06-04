@@ -1,5 +1,6 @@
 package com.example.configcenter.security;
 
+import com.example.configcenter.service.SecurityPathService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -25,9 +26,12 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final SecurityPathService securityPathService;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          SecurityPathService securityPathService) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.securityPathService = securityPathService;
     }
 
     @Bean
@@ -38,6 +42,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login").permitAll()
+                .requestMatchers(request -> securityPathService.isPublicPath(request.getRequestURI())).permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             )

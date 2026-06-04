@@ -33,3 +33,8 @@ jwt:
 
 encryption:
   master-key: AES256MasterKey32BytesLong123456
+
+security:
+  lockout:
+    max-attempts: 5
+    lock-duration-minutes: 30

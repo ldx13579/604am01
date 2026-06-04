@@ -4,7 +4,6 @@ import com.example.configcenter.model.dto.ValidationResult;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.HostAccess;
 import org.graalvm.polyglot.PolyglotException;
-import org.graalvm.polyglot.SandboxPolicy;
 import org.graalvm.polyglot.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,28 +22,17 @@ public class ScriptExecutor {
     private static final int MAX_SCRIPT_LENGTH = 64 * 1024;
     private static final int MAX_OUTPUT_BYTES = 4096;
 
-    private static final Set<String> BLOCKED_KEYWORDS = Set.of(
-            "java.lang.Runtime", "java.lang.ProcessBuilder", "java.io.File",
-            "java.net.Socket", "java.net.URL", "java.net.HttpURLConnection",
-            "Packages", "java.lang.System", "java.lang.Thread",
-            "eval(", "Function(", "new Function",
-            "require(", "import(", "globalThis.Deno", "globalThis.process"
-    );
-
     private static final Set<String> ALLOWED_JS_GLOBALS = Set.of(
             "JSON", "Math", "parseInt", "parseFloat", "isNaN", "isFinite",
             "String", "Number", "Boolean", "Array", "Object", "RegExp", "Date",
             "Map", "Set", "Error", "TypeError", "RangeError", "undefined", "NaN", "Infinity"
     );
 
-    private static final Pattern SUSPICIOUS_PATTERN = Pattern.compile(
-            "(\\bwhile\\s*\\(\\s*true\\s*\\))|" +
-            "(\\bfor\\s*\\(\\s*;\\s*;)|" +
-            "(\\bProcess\\b)|" +
-            "(\\bexec\\s*\\()|" +
-            "(\\b__proto__\\b)|" +
-            "(\\bconstructor\\b\\s*\\[)"
-    );
+    private final SecurityRuleService securityRuleService;
+
+    public ScriptExecutor(SecurityRuleService securityRuleService) {
+        this.securityRuleService = securityRuleService;
+    }
 
     public ValidationResult execute(String scriptContent, String configKey, String configValue) {
         ValidationResult preCheck = preValidateScript(scriptContent);
@@ -87,14 +75,16 @@ public class ScriptExecutor {
                     "Script exceeds maximum allowed size of " + (MAX_SCRIPT_LENGTH / 1024) + "KB");
         }
 
-        for (String keyword : BLOCKED_KEYWORDS) {
+        Set<String> blockedKeywords = securityRuleService.getBlockedKeywords();
+        for (String keyword : blockedKeywords) {
             if (scriptContent.contains(keyword)) {
                 return new ValidationResult(false,
                         "Script contains blocked keyword: " + keyword + ". Only pure data validation logic is allowed.");
             }
         }
 
-        if (SUSPICIOUS_PATTERN.matcher(scriptContent).find()) {
+        Pattern suspiciousPattern = securityRuleService.getSuspiciousPattern();
+        if (suspiciousPattern.matcher(scriptContent).find()) {
             return new ValidationResult(false,
                     "Script contains suspicious patterns that are not allowed in validation scripts");
         }

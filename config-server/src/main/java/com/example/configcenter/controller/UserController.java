@@ -4,6 +4,7 @@ import com.example.configcenter.model.dto.RoleAssignRequest;
 import com.example.configcenter.model.dto.UserCreateRequest;
 import com.example.configcenter.model.dto.UserDTO;
 import com.example.configcenter.model.entity.SysUserRole;
+import com.example.configcenter.service.AccountLockoutService;
 import com.example.configcenter.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -12,15 +13,18 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
 
     private final UserService userService;
+    private final AccountLockoutService lockoutService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, AccountLockoutService lockoutService) {
         this.userService = userService;
+        this.lockoutService = lockoutService;
     }
 
     @GetMapping
@@ -56,5 +60,12 @@ public class UserController {
     public ResponseEntity<Void> removeRole(@PathVariable Long id, @PathVariable Long roleId) {
         userService.removeRole(id, roleId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/unlock")
+    @PreAuthorize("@permissionChecker.hasPermission(authentication, '*', '*', 'ADMIN')")
+    public ResponseEntity<Map<String, String>> unlockAccount(@PathVariable Long id) {
+        lockoutService.adminUnlock(id);
+        return ResponseEntity.ok(Map.of("message", "Account unlocked successfully"));
     }
 }

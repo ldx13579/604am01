@@ -32,6 +32,12 @@ public class SysUser {
     @Column(name = "last_login_ip", length = 50)
     private String lastLoginIp;
 
+    @Column(name = "failed_login_attempts", nullable = false)
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -72,6 +78,12 @@ public class SysUser {
 
     public String getLastLoginIp() { return lastLoginIp; }
     public void setLastLoginIp(String lastLoginIp) { this.lastLoginIp = lastLoginIp; }
+
+    public Integer getFailedLoginAttempts() { return failedLoginAttempts; }
+    public void setFailedLoginAttempts(Integer failedLoginAttempts) { this.failedLoginAttempts = failedLoginAttempts; }
+
+    public LocalDateTime getLockedUntil() { return lockedUntil; }
+    public void setLockedUntil(LocalDateTime lockedUntil) { this.lockedUntil = lockedUntil; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 

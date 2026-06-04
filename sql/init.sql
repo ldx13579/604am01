@@ -83,6 +83,8 @@ CREATE TABLE sys_user (
     display_name    VARCHAR(100),
     enabled         TINYINT(1) NOT NULL DEFAULT 1,
     force_password_change TINYINT(1) NOT NULL DEFAULT 0 COMMENT '首次登录强制修改密码',
+    failed_login_attempts INT NOT NULL DEFAULT 0 COMMENT '连续登录失败次数',
+    locked_until    DATETIME COMMENT '账户锁定截止时间',
     last_login_at   DATETIME,
     last_login_ip   VARCHAR(50),
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -181,3 +183,54 @@ CREATE TABLE client_reconnect_log (
     INDEX idx_event_type (event_type),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB;
+
+-- ===================== 接口认证豁免配置 =====================
+
+CREATE TABLE security_public_path (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    path_pattern    VARCHAR(255) NOT NULL COMMENT '接口路径模式，支持Ant风格: /api/polling/**',
+    description     VARCHAR(500) DEFAULT '' COMMENT '豁免原因说明',
+    enabled         TINYINT(1) NOT NULL DEFAULT 1,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_path (path_pattern)
+) ENGINE=InnoDB;
+
+-- ===================== 运行时安全规则 =====================
+
+CREATE TABLE security_rule (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    rule_type       VARCHAR(30) NOT NULL COMMENT 'BLOCKED_KEYWORD / SUSPICIOUS_PATTERN / BLOCKED_FUNCTION',
+    rule_value      VARCHAR(500) NOT NULL COMMENT '规则内容：关键词或正则表达式',
+    description     VARCHAR(500) DEFAULT '' COMMENT '规则说明',
+    severity        VARCHAR(20) NOT NULL DEFAULT 'HIGH' COMMENT 'HIGH / MEDIUM / LOW',
+    enabled         TINYINT(1) NOT NULL DEFAULT 1,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_type_value (rule_type, rule_value)
+) ENGINE=InnoDB;
+
+-- 预置安全规则（从硬编码迁移到数据库）
+INSERT INTO security_rule (rule_type, rule_value, description, severity) VALUES
+('BLOCKED_KEYWORD', 'java.lang.Runtime', '阻止访问Java运行时', 'HIGH'),
+('BLOCKED_KEYWORD', 'java.lang.ProcessBuilder', '阻止进程创建', 'HIGH'),
+('BLOCKED_KEYWORD', 'java.io.File', '阻止文件系统访问', 'HIGH'),
+('BLOCKED_KEYWORD', 'java.net.Socket', '阻止网络Socket访问', 'HIGH'),
+('BLOCKED_KEYWORD', 'java.net.URL', '阻止URL访问', 'HIGH'),
+('BLOCKED_KEYWORD', 'java.net.HttpURLConnection', '阻止HTTP连接', 'HIGH'),
+('BLOCKED_KEYWORD', 'Packages', '阻止Java包访问', 'HIGH'),
+('BLOCKED_KEYWORD', 'java.lang.System', '阻止System类访问', 'HIGH'),
+('BLOCKED_KEYWORD', 'java.lang.Thread', '阻止线程操作', 'HIGH'),
+('BLOCKED_KEYWORD', 'eval(', '阻止动态代码执行', 'HIGH'),
+('BLOCKED_KEYWORD', 'Function(', '阻止动态函数创建', 'HIGH'),
+('BLOCKED_KEYWORD', 'new Function', '阻止动态函数创建', 'HIGH'),
+('BLOCKED_KEYWORD', 'require(', '阻止模块加载', 'MEDIUM'),
+('BLOCKED_KEYWORD', 'import(', '阻止动态导入', 'MEDIUM'),
+('BLOCKED_KEYWORD', 'globalThis.Deno', '阻止Deno运行时访问', 'MEDIUM'),
+('BLOCKED_KEYWORD', 'globalThis.process', '阻止Node进程访问', 'MEDIUM'),
+('SUSPICIOUS_PATTERN', '(\\bwhile\\s*\\(\\s*true\\s*\\))', '检测无限while循环', 'HIGH'),
+('SUSPICIOUS_PATTERN', '(\\bfor\\s*\\(\\s*;\\s*;)', '检测无限for循环', 'HIGH'),
+('SUSPICIOUS_PATTERN', '(\\bProcess\\b)', '检测进程关键词', 'MEDIUM'),
+('SUSPICIOUS_PATTERN', '(\\bexec\\s*\\()', '检测exec调用', 'HIGH'),
+('SUSPICIOUS_PATTERN', '(\\b__proto__\\b)', '检测原型链操纵', 'HIGH'),
+('SUSPICIOUS_PATTERN', '(\\bconstructor\\b\\s*\\[)', '检测constructor利用', 'HIGH');

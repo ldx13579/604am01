@@ -9,6 +9,7 @@ import com.example.configcenter.model.entity.SysUserRole;
 import com.example.configcenter.repository.SysUserRepository;
 import com.example.configcenter.repository.SysUserRoleRepository;
 import com.example.configcenter.security.JwtTokenProvider;
+import com.example.configcenter.service.AccountLockoutService;
 import com.example.configcenter.service.AuditService;
 import com.example.configcenter.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,6 +17,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,8 +26,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -38,6 +42,7 @@ public class AuthController {
     private final SysUserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
+    private final AccountLockoutService lockoutService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtTokenProvider jwtTokenProvider,
@@ -45,7 +50,8 @@ public class AuthController {
                           SysUserRepository userRepository,
                           SysUserRoleRepository userRoleRepository,
                           PasswordEncoder passwordEncoder,
-                          AuditService auditService) {
+                          AuditService auditService,
+                          AccountLockoutService lockoutService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.userService = userService;
@@ -53,41 +59,83 @@ public class AuthController {
         this.userRoleRepository = userRoleRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
+        this.lockoutService = lockoutService;
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
-
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        SysUser user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
         String clientIp = getClientIp(httpRequest);
-        user.setLastLoginAt(LocalDateTime.now());
-        user.setLastLoginIp(clientIp);
-        userRepository.save(user);
 
-        auditService.record(request.getUsername(), "LOGIN", "SESSION", null,
-                null, null, null, null, clientIp, "SUCCESS", null);
-
-        String token = jwtTokenProvider.generateToken(request.getUsername());
-        List<SysUserRole> roles = userRoleRepository.findByUserId(user.getId());
-
-        if (Boolean.TRUE.equals(user.getForcePasswordChange())) {
-            return ResponseEntity.ok(Map.of(
-                    "token", token,
-                    "username", user.getUsername(),
-                    "displayName", user.getDisplayName() != null ? user.getDisplayName() : "",
-                    "roles", roles,
-                    "forcePasswordChange", true
-            ));
+        Optional<SysUser> userOpt = userRepository.findByUsername(request.getUsername());
+        if (userOpt.isPresent()) {
+            SysUser user = userOpt.get();
+            if (lockoutService.isAccountLocked(user)) {
+                long minutesLeft = LocalDateTime.now().until(user.getLockedUntil(), ChronoUnit.MINUTES) + 1;
+                auditService.record(request.getUsername(), "LOGIN_BLOCKED", "SESSION", null,
+                        null, null, null, null, clientIp, "FAILURE", "Account locked");
+                return ResponseEntity.status(423).body(Map.of(
+                        "message", "账户已锁定，请" + minutesLeft + "分钟后重试或联系管理员解锁",
+                        "lockedUntil", user.getLockedUntil().toString(),
+                        "remainingMinutes", minutesLeft
+                ));
+            }
         }
 
-        LoginResponse response = new LoginResponse(token, user.getUsername(), user.getDisplayName(), roles);
-        return ResponseEntity.ok(response);
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
+
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            SysUser user = userOpt.orElseThrow(() -> new RuntimeException("User not found"));
+
+            lockoutService.resetFailedAttempts(user);
+
+            user.setLastLoginAt(LocalDateTime.now());
+            user.setLastLoginIp(clientIp);
+            userRepository.save(user);
+
+            auditService.record(request.getUsername(), "LOGIN", "SESSION", null,
+                    null, null, null, null, clientIp, "SUCCESS", null);
+
+            String token = jwtTokenProvider.generateToken(request.getUsername());
+            List<SysUserRole> roles = userRoleRepository.findByUserId(user.getId());
+
+            if (Boolean.TRUE.equals(user.getForcePasswordChange())) {
+                return ResponseEntity.ok(Map.of(
+                        "token", token,
+                        "username", user.getUsername(),
+                        "displayName", user.getDisplayName() != null ? user.getDisplayName() : "",
+                        "roles", roles,
+                        "forcePasswordChange", true
+                ));
+            }
+
+            LoginResponse response = new LoginResponse(token, user.getUsername(), user.getDisplayName(), roles);
+            return ResponseEntity.ok(response);
+
+        } catch (BadCredentialsException e) {
+            if (userOpt.isPresent()) {
+                SysUser user = userOpt.get();
+                lockoutService.recordFailedAttempt(user);
+                int remaining = lockoutService.getRemainingAttempts(user);
+
+                auditService.record(request.getUsername(), "LOGIN_FAILED", "SESSION", null,
+                        null, null, null, null, clientIp, "FAILURE", "Bad credentials");
+
+                if (remaining <= 0) {
+                    return ResponseEntity.status(423).body(Map.of(
+                            "message", "登录失败次数过多，账户已被锁定",
+                            "locked", true
+                    ));
+                }
+                return ResponseEntity.status(401).body(Map.of(
+                        "message", "用户名或密码错误，剩余尝试次数: " + remaining,
+                        "remainingAttempts", remaining
+                ));
+            }
+            return ResponseEntity.status(401).body(Map.of("message", "用户名或密码错误"));
+        }
     }
 
     @GetMapping("/me")
