@@ -120,8 +120,11 @@ public class ConfigServiceImpl implements ConfigService {
 
         Long newVersion = incrementVersion(item.getEnvironment(), item.getNamespace());
 
+        item.setConfigKey(target.getConfigKey());
         item.setConfigValue(target.getConfigValue());
         item.setDescription(target.getDescription());
+        item.setEnvironment(target.getEnvironment());
+        item.setNamespace(target.getNamespace());
         item.setVersion(newVersion);
         item = configItemRepo.save(item);
 

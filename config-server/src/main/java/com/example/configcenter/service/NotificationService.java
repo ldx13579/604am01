@@ -5,10 +5,12 @@ import com.example.configcenter.model.dto.PollingResponse;
 import com.example.configcenter.model.entity.ConfigItem;
 import com.example.configcenter.repository.ConfigItemRepository;
 import com.example.configcenter.repository.VersionCounterRepository;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.async.DeferredResult;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -54,6 +56,20 @@ public class NotificationService {
                 result.setResult(response);
             }
             list.remove(result);
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${notification.cleanup.interval-ms:15000}")
+    public void cleanupExpiredHolders() {
+        for (Map.Entry<String, CopyOnWriteArrayList<DeferredResult<PollingResponse>>> entry : holders.entrySet()) {
+            CopyOnWriteArrayList<DeferredResult<PollingResponse>> list = entry.getValue();
+            if (list == null) continue;
+
+            list.removeIf(DeferredResult::isSetOrExpired);
+
+            if (list.isEmpty()) {
+                holders.remove(entry.getKey(), list);
+            }
         }
     }
 
