@@ -1,5 +1,6 @@
 package com.example.configcenter.service;
 
+import com.example.configcenter.config.TestRabbitMQConfig;
 import com.example.configcenter.model.dto.ConfigCreateRequest;
 import com.example.configcenter.model.dto.ConfigItemDTO;
 import com.example.configcenter.model.dto.ConfigUpdateRequest;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -15,6 +17,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
+@Import(TestRabbitMQConfig.class)
 @Transactional
 class ConfigServiceTest {
 

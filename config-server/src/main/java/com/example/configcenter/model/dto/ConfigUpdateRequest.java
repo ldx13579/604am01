@@ -9,9 +9,14 @@ public class ConfigUpdateRequest {
 
     private String description;
 
+    private Long expectedVersion;
+
     public String getConfigValue() { return configValue; }
     public void setConfigValue(String configValue) { this.configValue = configValue; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public Long getExpectedVersion() { return expectedVersion; }
+    public void setExpectedVersion(Long expectedVersion) { this.expectedVersion = expectedVersion; }
 }

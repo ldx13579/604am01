@@ -6,6 +6,8 @@ import com.example.configcenter.repository.*;
 import com.example.configcenter.exception.ConfigNotFoundException;
 import com.example.configcenter.exception.ConfigAlreadyExistsException;
 import com.example.configcenter.exception.VersionNotFoundException;
+import com.example.configcenter.mq.ConfigChangePublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,9 @@ public class ConfigServiceImpl implements ConfigService {
     private final ConfigVersionRepository configVersionRepo;
     private final VersionCounterRepository versionCounterRepo;
     private final NotificationService notificationService;
+
+    @Autowired(required = false)
+    private ConfigChangePublisher changePublisher;
 
     public ConfigServiceImpl(ConfigItemRepository configItemRepo,
                              ConfigVersionRepository configVersionRepo,
@@ -62,7 +67,7 @@ public class ConfigServiceImpl implements ConfigService {
         item = configItemRepo.save(item);
 
         saveVersionHistory(item, "CREATE");
-        notificationService.notifyChange(request.getEnvironment(), request.getNamespace());
+        publishChange(request.getEnvironment(), request.getNamespace(), newVersion, "CREATE");
 
         return toDTO(item);
     }
@@ -72,6 +77,11 @@ public class ConfigServiceImpl implements ConfigService {
     public ConfigItemDTO updateConfig(Long id, ConfigUpdateRequest request) {
         ConfigItem item = configItemRepo.findById(id)
                 .orElseThrow(() -> new ConfigNotFoundException("Config not found: " + id));
+
+        if (request.getExpectedVersion() != null && !request.getExpectedVersion().equals(item.getVersion())) {
+            throw new com.example.configcenter.exception.VersionConflictException(
+                    "Version conflict: expected " + request.getExpectedVersion() + ", current " + item.getVersion());
+        }
 
         Long newVersion = incrementVersion(item.getEnvironment(), item.getNamespace());
 
@@ -83,7 +93,7 @@ public class ConfigServiceImpl implements ConfigService {
         item = configItemRepo.save(item);
 
         saveVersionHistory(item, "UPDATE");
-        notificationService.notifyChange(item.getEnvironment(), item.getNamespace());
+        publishChange(item.getEnvironment(), item.getNamespace(), newVersion, "UPDATE");
 
         return toDTO(item);
     }
@@ -99,7 +109,7 @@ public class ConfigServiceImpl implements ConfigService {
         saveVersionHistory(item, "DELETE");
 
         configItemRepo.delete(item);
-        notificationService.notifyChange(item.getEnvironment(), item.getNamespace());
+        publishChange(item.getEnvironment(), item.getNamespace(), newVersion, "DELETE");
     }
 
     @Override
@@ -129,7 +139,7 @@ public class ConfigServiceImpl implements ConfigService {
         item = configItemRepo.save(item);
 
         saveVersionHistory(item, "ROLLBACK");
-        notificationService.notifyChange(item.getEnvironment(), item.getNamespace());
+        publishChange(item.getEnvironment(), item.getNamespace(), newVersion, "ROLLBACK");
 
         return toDTO(item);
     }
@@ -166,6 +176,14 @@ public class ConfigServiceImpl implements ConfigService {
         version.setOperation(operation);
         version.setDescription(item.getDescription());
         configVersionRepo.save(version);
+    }
+
+    private void publishChange(String environment, String namespace, Long version, String operation) {
+        if (changePublisher != null) {
+            changePublisher.publishChange(environment, namespace, version, operation);
+        } else {
+            notificationService.notifyChange(environment, namespace);
+        }
     }
 
     private ConfigItemDTO toDTO(ConfigItem item) {

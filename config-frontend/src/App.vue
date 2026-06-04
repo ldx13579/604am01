@@ -4,7 +4,10 @@
       <el-header>
         <div class="header-content">
           <h1>分布式配置中心</h1>
-          <span class="version-info">Distributed Config Center</span>
+          <nav class="header-nav">
+            <router-link to="/" class="nav-link">配置管理</router-link>
+            <router-link to="/grayscale" class="nav-link">灰度发布</router-link>
+          </nav>
         </div>
       </el-header>
       <el-main>
@@ -35,8 +38,9 @@ body {
 
 .header-content {
   display: flex;
-  align-items: baseline;
-  gap: 16px;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
 }
 
 .header-content h1 {
@@ -44,9 +48,24 @@ body {
   font-size: 20px;
 }
 
-.version-info {
-  font-size: 13px;
-  opacity: 0.8;
+.header-nav {
+  display: flex;
+  gap: 16px;
+}
+
+.nav-link {
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.nav-link:hover,
+.nav-link.router-link-active {
+  color: white;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .el-main {

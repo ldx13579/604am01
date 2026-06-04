@@ -10,6 +10,11 @@ const routes = [
     path: '/history/:id',
     name: 'VersionHistory',
     component: () => import('../views/VersionHistory.vue')
+  },
+  {
+    path: '/grayscale',
+    name: 'GrayscaleManage',
+    component: () => import('../views/GrayscaleManage.vue')
   }
 ]
 

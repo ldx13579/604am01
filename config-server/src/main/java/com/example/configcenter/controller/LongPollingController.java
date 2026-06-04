@@ -3,7 +3,9 @@ package com.example.configcenter.controller;
 import com.example.configcenter.model.dto.ConfigItemDTO;
 import com.example.configcenter.model.dto.PollingResponse;
 import com.example.configcenter.service.ConfigService;
+import com.example.configcenter.service.GrayscaleService;
 import com.example.configcenter.service.NotificationService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
@@ -17,19 +19,28 @@ public class LongPollingController {
 
     private final ConfigService configService;
     private final NotificationService notificationService;
+    private final GrayscaleService grayscaleService;
 
-    public LongPollingController(ConfigService configService, NotificationService notificationService) {
+    public LongPollingController(ConfigService configService,
+                                 NotificationService notificationService,
+                                 GrayscaleService grayscaleService) {
         this.configService = configService;
         this.notificationService = notificationService;
+        this.grayscaleService = grayscaleService;
     }
 
     @GetMapping("/polling")
     public DeferredResult<PollingResponse> polling(
             @RequestParam(defaultValue = "dev") String env,
             @RequestParam(defaultValue = "default") String ns,
-            @RequestParam Long clientVersion) {
+            @RequestParam Long clientVersion,
+            HttpServletRequest request) {
 
-        Long serverVersion = configService.getCurrentVersion(env, ns);
+        String clientIp = getClientIp(request);
+        grayscaleService.registerHeartbeat(clientIp, env, ns, clientVersion);
+
+        Long grayscaleVersion = grayscaleService.getGrayscaleTargetVersion(clientIp, env, ns);
+        Long serverVersion = (grayscaleVersion != null) ? grayscaleVersion : configService.getCurrentVersion(env, ns);
 
         DeferredResult<PollingResponse> result = new DeferredResult<>(POLLING_TIMEOUT);
 
@@ -51,5 +62,17 @@ public class LongPollingController {
             @RequestParam(defaultValue = "dev") String env,
             @RequestParam(defaultValue = "default") String ns) {
         return configService.getCurrentVersion(env, ns);
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        return request.getRemoteAddr();
     }
 }

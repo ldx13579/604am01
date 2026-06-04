@@ -25,3 +25,21 @@ export const rollbackConfig = (id, targetVersion) =>
 
 export const getCurrentVersion = (env, ns = 'default') =>
   api.get('/version', { params: { env, ns } })
+
+export const getGrayscaleRules = (env, ns = 'default') =>
+  api.get('/grayscale/rules', { params: { env, ns } })
+
+export const createGrayscaleRule = (data) =>
+  api.post('/grayscale/rules', data)
+
+export const updateGrayscaleRule = (id, data) =>
+  api.put(`/grayscale/rules/${id}`, data)
+
+export const fullReleaseRule = (id) =>
+  api.post(`/grayscale/rules/${id}/full-release`)
+
+export const cancelRule = (id) =>
+  api.post(`/grayscale/rules/${id}/cancel`)
+
+export const getClients = (env, ns = 'default') =>
+  api.get('/grayscale/clients', { params: { env, ns } })

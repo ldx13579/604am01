@@ -35,6 +35,7 @@ public class ConfigClient {
     private volatile Long localVersion = 0L;
     private final ConcurrentHashMap<String, String> configCache = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<ConfigChangeListener> listeners = new CopyOnWriteArrayList<>();
+    private final ConcurrentHashMap<String, CopyOnWriteArrayList<ConfigKeyChangeListener>> keyListeners = new ConcurrentHashMap<>();
     private final RestTemplate restTemplate = new RestTemplate();
     private volatile boolean running = false;
     private volatile boolean shutdown = false;
@@ -66,6 +67,21 @@ public class ConfigClient {
 
     public void addListener(ConfigChangeListener listener) {
         listeners.add(listener);
+    }
+
+    public void removeListener(ConfigChangeListener listener) {
+        listeners.remove(listener);
+    }
+
+    public void addKeyListener(String key, ConfigKeyChangeListener listener) {
+        keyListeners.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(listener);
+    }
+
+    public void removeKeyListener(String key, ConfigKeyChangeListener listener) {
+        CopyOnWriteArrayList<ConfigKeyChangeListener> list = keyListeners.get(key);
+        if (list != null) {
+            list.remove(listener);
+        }
     }
 
     public String getConfig(String key) {
@@ -106,6 +122,8 @@ public class ConfigClient {
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> configs = (List<Map<String, Object>>) response.get("configs");
 
+                    Map<String, String> oldConfigs = Map.copyOf(configCache);
+
                     configCache.clear();
                     if (configs != null) {
                         for (Map<String, Object> config : configs) {
@@ -117,6 +135,7 @@ public class ConfigClient {
                     }
                     localVersion = newVersion;
                     notifyListeners();
+                    notifyKeyListeners(oldConfigs, newVersion);
                 }
             } catch (Exception e) {
                 if (!running) break;
@@ -175,6 +194,30 @@ public class ConfigClient {
                 listener.onConfigChange(snapshot, localVersion);
             } catch (Exception e) {
                 System.err.println("Listener error: " + e.getMessage());
+            }
+        }
+    }
+
+    private void notifyKeyListeners(Map<String, String> oldConfigs, Long version) {
+        Set<String> allKeys = new HashSet<>();
+        allKeys.addAll(oldConfigs.keySet());
+        allKeys.addAll(configCache.keySet());
+
+        for (String key : allKeys) {
+            String oldValue = oldConfigs.get(key);
+            String newValue = configCache.get(key);
+
+            if (!Objects.equals(oldValue, newValue)) {
+                CopyOnWriteArrayList<ConfigKeyChangeListener> list = keyListeners.get(key);
+                if (list != null) {
+                    for (ConfigKeyChangeListener listener : list) {
+                        try {
+                            listener.onKeyChange(key, oldValue, newValue, version);
+                        } catch (Exception e) {
+                            System.err.println("Key listener error for key '" + key + "': " + e.getMessage());
+                        }
+                    }
+                }
             }
         }
     }
