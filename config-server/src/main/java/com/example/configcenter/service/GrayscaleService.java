@@ -7,6 +7,9 @@ import com.example.configcenter.model.entity.GrayscaleRule;
 import com.example.configcenter.repository.ClientInstanceRepository;
 import com.example.configcenter.repository.GrayscaleRuleRepository;
 import com.example.configcenter.exception.ConfigNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +20,11 @@ import java.util.stream.Collectors;
 
 @Service
 public class GrayscaleService {
+
+    private static final Logger log = LoggerFactory.getLogger(GrayscaleService.class);
+
+    @Value("${grayscale.client.offline-threshold-minutes:3}")
+    private int offlineThresholdMinutes;
 
     private final GrayscaleRuleRepository grayscaleRuleRepo;
     private final ClientInstanceRepository clientInstanceRepo;
@@ -136,12 +144,15 @@ public class GrayscaleService {
     @Scheduled(fixedDelay = 60000)
     @Transactional
     public void markOfflineClients() {
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(5);
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(offlineThresholdMinutes);
         List<ClientInstance> staleClients = clientInstanceRepo.findByLastHeartbeatBefore(threshold);
         for (ClientInstance client : staleClients) {
             if ("ONLINE".equals(client.getStatus())) {
                 client.setStatus("OFFLINE");
                 clientInstanceRepo.save(client);
+                log.warn("Client {} (env={}, ns={}) marked OFFLINE: no heartbeat for {} minutes",
+                        client.getClientIp(), client.getEnvironment(), client.getNamespace(),
+                        offlineThresholdMinutes);
             }
         }
     }

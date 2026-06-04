@@ -75,8 +75,9 @@ public class ConfigClient {
 
     public void addKeyListener(String key, ConfigKeyChangeListener listener) {
         if (!configCache.containsKey(key)) {
-            System.err.println("Warning: key '" + key + "' does not exist in current config cache. "
-                    + "Listener registered but will only trigger after the key appears.");
+            throw new IllegalArgumentException(
+                    "Cannot register listener: key '" + key + "' does not exist in config cache. "
+                    + "Ensure the key is loaded before registering a listener.");
         }
         keyListeners.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(listener);
     }

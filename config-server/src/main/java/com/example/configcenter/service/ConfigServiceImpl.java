@@ -187,11 +187,17 @@ public class ConfigServiceImpl implements ConfigService {
             try {
                 changePublisher.publishChange(environment, namespace, version, operation);
             } catch (Exception e) {
-                log.warn("RabbitMQ publish failed, falling back to local notification. Reason: {}", e.getMessage());
+                log.error("[ALERT] RabbitMQ publish FAILED for env={}, ns={}, version={}, operation={}. "
+                        + "Falling back to local-only notification. Multi-instance broadcast is BROKEN. "
+                        + "Cause: {}",
+                        environment, namespace, version, operation, e.getMessage(), e);
                 notificationService.notifyChange(environment, namespace);
             }
         } else {
-            log.warn("RabbitMQ is not configured. Config change events are only broadcast locally.");
+            log.error("[ALERT] RabbitMQ is NOT available. Config changes (env={}, ns={}) "
+                    + "are only broadcast to local instance. Other server nodes will NOT receive updates. "
+                    + "Check spring.rabbitmq.host configuration and RabbitMQ service status.",
+                    environment, namespace);
             notificationService.notifyChange(environment, namespace);
         }
     }

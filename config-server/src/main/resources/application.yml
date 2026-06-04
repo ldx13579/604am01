@@ -21,3 +21,7 @@ server:
   port: 8080
 
 spring.mvc.async.request-timeout: 35000
+
+grayscale:
+  client:
+    offline-threshold-minutes: 3
